@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Glass Reader",
+  "version": "0.4.0",
+  "description": "Lets Glass Reader's Ctrl+Alt+C read the page you're looking at: articles, newsletters, GitHub, Google Docs, AI chats (with formulas, canvases and artifacts).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvOk7MUdHRtwgTwXKjgwnVpDWOvEeuAZfbvwgAgliZEKEkmgey09UppLnhYagUjdXR2Ux1yDsLV5CFcM+stk/b1Iw0n5DamtgYcOpLaaJEWpuj/jjBunuLGqGDsWOFKPi4tMgMnPb9Q45iF54CVzulmLSTpqGPUytbM/TuhMxVOQvWaI8ZEc/XhosXRsxr0hYx+pGn9cLO6s9epWsh193UWfr3hho9AyJZVz1aMYORH8ZN2FYkKfE2ryKTCp0sv380n7GorTTGvfq1UTCb/pckRuQ2lKF1DdOgO98PtCnO+Y5CA3tEt+AQWWBInrur1QCOUXWru5QPTaFMRal4QbjswIDAQAB",
+  "permissions": ["nativeMessaging", "scripting", "tabs", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "minimum_chrome_version": "110"
+}

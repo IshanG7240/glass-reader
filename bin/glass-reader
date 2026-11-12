@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Launcher used by the GNOME shortcut, launcher entry and autostart.
+# Usage: glass-reader [--toggle | --show | --hide | --quit | --background | FILE]
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+D="$DIR/node_modules/electron/dist"
+# Copies and syncs can drop the executable bit; restore it quietly.
+[[ -x "$D/electron" ]] || chmod +x "$D/electron" "$D/chrome_crashpad_handler" 2>/dev/null
+# Ubuntu blocks Electron's sandbox unless an AppArmor profile allows it. Say so
+# instead of crashing silently (the crash only shows up in the system journal).
+if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]] \
+   && [[ ! -f /etc/apparmor.d/glass-reader ]] && [[ ! -u "$D/chrome-sandbox" ]] \
+   && [[ "$(cat /proc/self/attr/current 2>/dev/null)" == unconfined ]]; then
+  msg="One-time setup needed: run  sudo $DIR/scripts/install-apparmor.sh"
+  notify-send -a "Glass Reader" -i dialog-warning "Glass Reader can't start yet" "$msg" 2>/dev/null || true
+  echo "$msg" >&2
+  exit 1
+fi
+# Already running? Hand the arguments over its socket (milliseconds) instead of
+# starting Electron again just to pass them on (about a second).
+SOCK="$HOME/.cache/glass-reader/reader.sock"
+if [[ -S "$SOCK" && "${1:-}" != "--background" ]] && command -v python3 >/dev/null; then
+  python3 -I - "$SOCK" "$@" <<'PY' && exit 0
+import json, os, socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(1.5)
+try:
+    s.connect(sys.argv[1])
+    s.sendall((json.dumps({'argv': sys.argv[2:], 'cwd': os.getcwd()}) + '\n').encode())
+    sys.exit(0 if s.recv(16).startswith(b'ok') else 1)
+except OSError:
+    sys.exit(1)
+PY
+fi
+exec "$D/electron" "$DIR" "$@"

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Glass Reader</string>
+    <string name="share_label">Read in Glass Reader</string>
+    <string name="process_label">Glass Reader</string>
+    <string name="service_label">Glass Reader: read chats</string>
+    <string name="service_summary">A Read button over ChatGPT, Claude and Gemini</string>
+    <string name="service_description">Adds a small reader button at the edge of the screen while ChatGPT, Claude or Gemini is open. Tap it and Glass Reader reads the chat on screen, scrolling through it to collect the whole conversation, and opens it as one clean document. It only looks at those three apps, only when you tap that button, and nothing leaves your phone.</string>
+</resources>

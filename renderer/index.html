@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glass Reader</title>
+  <link rel="stylesheet" href="../node_modules/@fontsource/literata/400.css">
+  <link rel="stylesheet" href="../node_modules/@fontsource/literata/400-italic.css">
+  <link rel="stylesheet" href="../node_modules/@fontsource/literata/600.css">
+  <link rel="stylesheet" href="../node_modules/@fontsource/literata/600-italic.css">
+  <link rel="stylesheet" href="../node_modules/@fontsource/literata/700.css">
+  <link rel="stylesheet" href="../node_modules/@fontsource-variable/inter/index.css">
+  <link rel="stylesheet" href="../node_modules/@fontsource/jetbrains-mono/400.css">
+  <link rel="stylesheet" href="../node_modules/katex/dist/katex.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="glass">
+  <div id="bg" aria-hidden="true"><img id="wall" alt=""></div>
+  <div id="tint" aria-hidden="true"></div>
+  <div id="grain" aria-hidden="true"></div>
+
+  <div id="progress" aria-hidden="true"><i></i></div>
+  <div id="section" aria-hidden="true"></div>
+
+  <main id="stage"></main>
+
+  <section id="welcome">
+    <div class="welcome-card">
+      <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <h1>Glass Reader</h1>
+      <p class="lede">Any long document, on one calm sheet of glass.</p>
+      <div class="actions">
+        <button class="primary" data-act="open">Open a file <kbd>O</kbd></button>
+        <button data-act="sample">Read the guide</button>
+      </div>
+      <p class="formats">PDF · Markdown · EPUB · Word · HTML · Text — or drop a file anywhere</p>
+      <div id="recents"></div>
+      <p class="hint"><kbd>?</kbd> shortcuts · <kbd>Esc</kbd> hide overlay · <kbd>Ctrl</kbd><kbd>Q</kbd> quit</p>
+    </div>
+  </section>
+
+  <div id="loading" hidden><div class="ring"></div><span>Reading…</span></div>
+
+  <nav id="hud" aria-label="Reader controls">
+    <span class="doc-title" id="v-title"></span>
+    <div class="seg" id="modes" role="tablist">
+      <button data-mode="column" title="Column (1)">Column</button>
+      <button data-mode="book" title="Book (2)">Book</button>
+      <button data-mode="focus" title="Focus (3)">Focus</button>
+      <button data-mode="cinema" title="Cinema (4)">Cinema</button>
+      <button data-mode="prompter" title="Prompter (5)">Prompter</button>
+    </div>
+    <div class="grp" title="Text size (− / +)">
+      <button data-act="size-" aria-label="Smaller text"><small>A</small></button>
+      <span id="v-size"></span>
+      <button data-act="size+" aria-label="Larger text">A</button>
+    </div>
+    <div class="grp" title="Line width ([ / ])">
+      <button data-act="measure-" aria-label="Narrower">⟨</button>
+      <span id="v-measure"></span>
+      <button data-act="measure+" aria-label="Wider">⟩</button>
+    </div>
+    <div class="grp" title="Line height (L / Shift+L)">
+      <button data-act="lead-" aria-label="Tighter lines">≡</button>
+      <span id="v-lead"></span>
+      <button data-act="lead+" aria-label="Looser lines">☰</button>
+    </div>
+    <button data-act="font" id="v-font" title="Typeface (F)"></button>
+    <button data-act="theme" id="v-theme" title="Background (T)"></button>
+    <button data-act="align" id="v-align" title="Alignment (A)"></button>
+    <button data-act="play" id="v-play" title="Play / pause (P) · speed , ."></button>
+    <span class="stat" id="v-stat"></span>
+    <span class="sep"></span>
+    <button data-act="open" title="Open file (O)" aria-label="Open file">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+    </button>
+    <button data-act="help" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
+    <button data-act="hide" title="Hide overlay (Esc)" aria-label="Hide overlay">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+  </nav>
+
+  <section id="help" hidden>
+    <div class="help-card">
+      <h2>Keyboard</h2>
+      <div class="keys">
+        <div><kbd>1</kbd>–<kbd>5</kbd><span>Column · Book · Focus · Cinema · Prompter</span></div>
+        <div><kbd>↑</kbd><kbd>↓</kbd> <kbd>Space</kbd><span>Move through the text</span></div>
+        <div><kbd>←</kbd><kbd>→</kbd><span>Turn pages / step</span></div>
+        <div><kbd>P</kbd><span>Auto-play (Focus, Cinema, Prompter)</span></div>
+        <div><kbd>,</kbd><kbd>.</kbd><span>Slower / faster (words per minute)</span></div>
+        <div><kbd>−</kbd><kbd>+</kbd><span>Text size</span></div>
+        <div><kbd>[</kbd><kbd>]</kbd><span>Line width</span></div>
+        <div><kbd>L</kbd><kbd>⇧L</kbd><span>Looser / tighter line height</span></div>
+        <div><kbd>F</kbd><span>Serif · Sans · Mono</span></div>
+        <div><kbd>T</kbd><span>Glass · Studio · Frost · Clear · Night · Paper</span></div>
+        <div><kbd>A</kbd><span>Left-aligned / justified</span></div>
+        <div><kbd>I</kbd><span>Paragraph spacing / book indents</span></div>
+        <div><kbd>H</kbd><span>Pin or auto-hide the control bar</span></div>
+        <div><kbd>O</kbd><span>Open a file</span></div>
+        <div><kbd>C</kbd><span>Claude sessions</span></div>
+        <div><kbd>Ctrl</kbd><kbd>+</kbd><kbd>−</kbd><kbd>0</kbd><span>Zoom the whole interface</span></div>
+        <div><kbd>Esc</kbd><span>Hide the overlay</span></div>
+        <div><kbd>Ctrl</kbd><kbd>Q</kbd><span>Quit</span></div>
+      </div>
+      <p class="hint">Line height follows size and width automatically, so combinations stay readable. <kbd>L</kbd> nudges it.</p>
+    </div>
+  </section>
+
+  <section id="picker" hidden>
+    <div class="picker-card">
+      <h2>Claude sessions <span>↑↓ choose · Enter open · Esc close</span></h2>
+      <div id="picker-list"></div>
+    </div>
+  </section>
+
+  <div id="dropzone" hidden><div>Drop to read</div></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <input type="file" id="file" hidden accept=".pdf,.md,.markdown,.txt,.docx,.epub,.html,.htm,text/*">
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Open Claude Code's latest answer in Glass Reader.
+# In Claude Code, type:  ! claude-read
+exec node "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/claude-to-reader.js" --last "$@"

@@ -1,0 +1,66 @@
+/* ---------- Glass Reader inside a chat page (Safari on iPad / iPhone) ---------- */
+
+:root { color-scheme: normal; }
+/* Fonts fall back to Apple's own while the embedded ones load (or on other scripts). */
+body.in-page { --ui: "Inter Variable", "Inter", -apple-system, system-ui, sans-serif; }
+
+/* Glass, Frost and Clear look through to the conversation itself, blurred by the
+   frame (there is no wallpaper to borrow here). */
+body.in-page[data-theme="glass"],
+body.in-page[data-theme="frost"],
+body.in-page[data-theme="clear"] { --body-bg: transparent; }
+body.in-page[data-theme="glass"] #bg,
+body.in-page[data-theme="frost"] #bg { display: none; }
+body.in-page[data-theme="glass"] { --tint: linear-gradient(180deg, rgba(8, 10, 18, 0.66), rgba(8, 10, 18, 0.76)); }
+body.in-page[data-theme="frost"] { --tint: linear-gradient(180deg, rgba(246, 247, 251, 0.80), rgba(240, 242, 248, 0.88)); }
+
+/* Scrolling the reader never scrolls the chat underneath. */
+body.in-page .scroller { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* Touch: bigger targets, and a control bar that scrolls sideways when it doesn't fit. */
+@media (pointer: coarse) {
+  body.in-page #hud { padding: 5px; gap: 4px; }
+  body.in-page #hud button { min-width: 40px; height: 40px; }
+  body.in-page .seg button { height: 34px !important; }
+}
+body.in-page #hud {
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 16px);
+}
+body.in-page #hud::-webkit-scrollbar { display: none; }
+body.in-page #hud [data-act="help"] { display: none; }
+@media (pointer: fine) { body.in-page #hud [data-act="help"] { display: inline-flex; } }
+
+/* Phones: narrower margins. */
+@media (max-width: 600px) {
+  body.in-page .mode-column .doc { width: calc(100vw - 40px); padding-top: 10vh; }
+  body.in-page .mode-prompter .doc { width: calc(100vw - 40px); }
+  body.in-page .focus-track { width: calc(100vw - 48px); }
+  body.in-page #section { padding: 0 12vw; }
+  body.in-page .seg button { padding: 6px 9px !important; }
+}
+
+/* Claude allows images only from claude.ai itself, so no SVG noise texture. */
+body.in-page #grain { display: none; }
+
+/* Text scrolled past the top fades out under the section title instead of colliding with it. */
+body.in-page .mode-column .scroller {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent 44px, #000 96px);
+          mask-image: linear-gradient(180deg, transparent 0, transparent 44px, #000 96px);
+}
+
+/* In the see-through themes the background is transparent, so the selected pill (inked
+   with --body-bg everywhere else) gets explicit ink. Solid themes keep their own. */
+body.in-page[data-theme="glass"] :is(.seg button.on, .actions button.primary),
+body.in-page[data-theme="clear"] :is(.seg button.on, .actions button.primary) { color: #0b0d14 !important; }
+body.in-page[data-theme="frost"] :is(.seg button.on, .actions button.primary) { color: #fff !important; }
+
+/* Control bar: close first (there's no Esc key without a keyboard), never squeezed. */
+body.in-page #hud > * { flex-shrink: 0; }
+body.in-page #hud [data-act="hide"] { order: -1; color: var(--fg); }
+@media (max-width: 1000px) {
+  body.in-page #v-align, body.in-page .grp:has([data-act="lead-"]), body.in-page .stat, body.in-page .doc-title { display: none; }
+}
+@media (max-width: 600px) {
+  body.in-page .grp:has([data-act="measure-"]), body.in-page #hud [data-act="open"] { display: none; }
+}

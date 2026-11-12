@@ -1,0 +1,13 @@
+{
+  "name": "glass-reader",
+  "displayName": "Glass Reader",
+  "description": "Lets Glass Reader's Ctrl+Alt+C read the file open in the editor.",
+  "version": "0.1.1",
+  "publisher": "local",
+  "license": "ISC",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "extensionKind": ["ui"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js"
+}

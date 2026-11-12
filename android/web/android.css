@@ -1,0 +1,41 @@
+/* Glass Reader on Android: phone-sized controls on top of the desktop styles. */
+
+body.android { -webkit-tap-highlight-color: transparent; }
+
+/* Controls: a wrapping sheet at the bottom instead of one long pill. */
+body.android #hud {
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: calc(100vw - 20px); max-width: 560px;
+  flex-wrap: wrap; justify-content: center; row-gap: 4px;
+  border-radius: 22px; padding: 8px;
+  font-size: 14px;
+}
+body.android #hud .doc-title {
+  display: block; flex: 1 0 100%; max-width: none; text-align: center;
+  padding: 2px 8px 4px; font-size: 13px; color: var(--fg-dim);
+}
+body.android #hud .stat, body.android #hud .sep, body.android #hud [data-act="help"] { display: none; }
+body.android #hud .grp:nth-of-type(3), body.android #v-align { display: inline-flex; }
+body.android #hud button { min-width: 40px; height: 40px; }
+body.android .seg { flex: 1 0 100%; justify-content: space-between; }
+body.android .seg button { flex: 1; padding: 6px 4px !important; height: 34px !important; font-size: 13px; }
+
+/* Shown and hidden by a tap (shim.js), not by the desktop's mouse-move timer: a tap
+   also counts as a mouse move, which would flash the controls for two seconds. */
+body.android:not(.gr-hud) #hud, body.android.no-doc #hud { opacity: 0; transform: translate(-50%, 14px); pointer-events: none; }
+body.android.gr-hud:not(.no-doc) #hud { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+
+/* Welcome card fits a phone. */
+body.android .welcome-card { width: calc(100vw - 32px); max-width: 480px; box-sizing: border-box; }
+body.android .gr-android { margin: 18px 0 4px; font-size: 14px; line-height: 1.5; color: var(--fg-dim); }
+body.android .gr-android b { color: var(--fg); font-weight: 600; }
+body.android .gr-android button { margin: 6px 0; }
+body.android .gr-android .gr-small { font-size: 12.5px; opacity: 0.85; }
+body.android .gr-pill {
+  display: inline-flex; align-items: center; justify-content: center; vertical-align: -4px;
+  width: 26px; height: 20px; border-radius: 10px 0 0 10px;
+  background: rgba(22, 24, 34, 0.85); border: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+/* The shortcut sheet is about keys; the controls bar covers a phone. */
+body.android #help .keys { font-size: 13px; }
