@@ -1,22 +1,114 @@
 # Glass Reader
 
-A full-screen reading overlay for long documents. Open a file and everything except the text goes away: no sidebars, no toolbars, no app chrome, just the writing on a blurred sheet of glass with typography that stays readable.
+**Read long things on a calm sheet of glass.** Glass Reader lays a full-screen reader over whatever you're reading — a whole ChatGPT, Claude or Gemini conversation, an article, a GitHub pull request, a Google Doc, a PDF — and takes everything else away: no sidebars, no buttons, no clutter. Just the text, set in good type, with maths, tables, code and images intact.
 
-**v1 scope:** you pick the file. Automatic capture from whatever app is on screen comes later.
+[![Latest release](https://img.shields.io/github/v/release/IshanG7240/glass-reader?label=download)](https://github.com/IshanG7240/glass-reader/releases/latest)
+[![License: ISC](https://img.shields.io/badge/license-ISC-blue)](LICENSE)
+
+![A ChatGPT conversation in Glass Reader](docs/screenshots/conversation.png)
+
+<p>
+  <img src="docs/screenshots/article.png" width="64%" alt="A blog post in Glass Reader, over the page it came from">
+  <img src="docs/screenshots/phone.png" width="22%" alt="A Claude conversation on a phone, with the layout bar">
+</p>
+
+## Why
+
+AI chats are where a lot of studying happens now, and chat windows are bad at long reading: narrow columns, endless scrolling, the next prompt box always in view. Glass Reader turns a whole conversation into one document — each of your prompts a heading, the answers in full, opening at the latest answer with everything earlier above it — and gives you reading layouts built for staying with it.
+
+- **Whole conversations** from ChatGPT, Claude and Gemini, read with your own sign-in. Formulas stay formulas, and generated images, canvases and artifacts come along.
+- **Any web page:** articles and newsletters (the article only), GitHub READMEs, issues and diffs, Google Docs.
+- **Files** (desktop app): PDF, EPUB, Word, Markdown, HTML, text.
+- **Five layouts:** Column, Book (two-page spread), Focus (the current passage bright, the rest faded), Cinema (one passage at a time) and Prompter (auto-scrolling).
+- **Ten backgrounds**, from see-through Glass to themes matched to the light in your room, with tuned size, line width and line height.
+- **Private:** everything happens on your device. No account, no server, no tracking.
 
 ## Download
 
-Everything is on the [latest release](https://github.com/IshanG7240/glass-reader/releases/latest):
+Get it from the [latest release](https://github.com/IshanG7240/glass-reader/releases/latest):
 
-| Where | File | Install |
+| Where | Download | What it does |
 | --- | --- | --- |
-| Chrome, Edge, Brave (Windows, Mac, Linux) | [glass-reader-extension.zip](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader-extension.zip) | Unzip. Open `chrome://extensions` (or `edge://extensions`), turn on **Developer mode**, **Load unpacked**, pick the unzipped folder. Pin it from the puzzle-piece menu. Then click it (or **Alt+Shift+R**) on any page. |
-| iPad, iPhone (Safari) | [glass-reader.user.js](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.user.js) | Install the free **Userscripts** app and open it once. Download this file in Safari, then in the Files app move it into the Userscripts folder. Allow the extension on chatgpt.com, claude.ai and gemini.google.com (Settings → Apps → Safari → Extensions). Details [below](#ipad-and-iphone-chatgpt-claude-and-gemini-conversations). |
-| Android | [glass-reader.apk](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.apk) | Open it on the phone and allow installing from your browser once. Details [below](#android-chatgpt-claude-and-gemini-apps). |
+| **Chrome, Edge, Brave** (Windows, Mac, Linux) | [glass-reader-extension.zip](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader-extension.zip) | A toolbar button that opens the page you're on in the reader. [Install](#browser-extension-chrome-edge-brave) |
+| **iPad, iPhone** (Safari) | [glass-reader.user.js](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.user.js) | A READ tab on ChatGPT, Claude and Gemini conversations. [Install](#ipad-and-iphone-chatgpt-claude-and-gemini-conversations) |
+| **Android** | [glass-reader.apk](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.apk) | Reads conversations straight from the ChatGPT, Claude and Gemini apps; opens anything you share. [Install](#android-chatgpt-claude-and-gemini-apps) |
+| **Linux desktop** | from source | The full app: files, a global hotkey that reads whatever window you're in, Claude Code sessions. [Set up](#linux-desktop-app) |
 
-The desktop app (Linux) runs from source: see [Run it](#run-it).
+## Using it
 
-## Run it
+Tap or move the mouse to bring up the control bar. With a keyboard:
+
+| Key | Does |
+| --- | --- |
+| `1`–`5` | Column, Book, Focus, Cinema, Prompter |
+| `←` `→` / swipe | Turn the page (Book, Focus, Cinema) |
+| `P` | Auto-play Focus, Cinema and Prompter (`,` `.` slower / faster) |
+| `−` `+` · `[` `]` | Text size · line width |
+| `T` · `F` | Background · typeface |
+| `C` | Read the page again (a chat that has grown) |
+| `Esc` | Close |
+
+Your place in each document is remembered. More in [Layouts](#layouts).
+
+## Privacy
+
+Glass Reader reads a page only when you ask it to (the button, the tab or the hotkey), using the sign-in you already have on that site, the same way the site's own page does. What it reads stays on your device: there is no server, no account, no analytics. Details: [PRIVACY.md](extension/standalone/PRIVACY.md).
+
+## Browser extension (Chrome, Edge, Brave)
+
+A version that needs nothing else installed: no desktop app, no shortcuts to set up. Click its toolbar button (or press **Alt+Shift+R**) and the page you're on opens in the reader, laid over it: articles and newsletters, GitHub READMEs, issues and pull requests (as a diff), Google Docs, and whole ChatGPT, Claude and Gemini conversations, opened at the latest answer. Click it again, or press Esc, to put it away; **C** reads the page again (a chat that has grown).
+
+**Install:** download [glass-reader-extension.zip](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader-extension.zip) and unzip it. Open `chrome://extensions` (`edge://extensions` in Edge), turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder. The button may hide under the puzzle-piece menu; the pin puts it on the toolbar.
+
+**Permissions:** it asks only for `activeTab` and `scripting`, so the install prompt shows no "read all your data" warning: it sees a page only when you click its button there.
+
+**Under the hood:** it is the same reader as the iPad userscript (`ios/overlay.js`, built with `extension: true`) and reads pages with the same code as the desktop companion (`extension/browser/background.js`, from `captureTab()` on). PDFs and diagrams open in the desktop app only. Not on Firefox yet.
+
+## iPad and iPhone: ChatGPT, Claude and Gemini conversations
+
+On iOS no app can read another app's screen, so Glass Reader works inside **Safari**, as a userscript run by the free **Userscripts** app (App Store). It doesn't need a Mac, Xcode or a developer account. On a ChatGPT, Claude or Gemini conversation, a small glass tab sits on the right edge (a blue-violet READ tab). Tap it (or press **Ctrl+Option+C** on a keyboard) and the **whole conversation** opens over the page at the latest answer, with earlier prompts and answers above it. It uses the same reader, layouts, maths, tables and code as the desktop app.
+
+- **Glass** shows the conversation behind the text, blurred. **T** or the theme button cycles through the others.
+- **Tap** to bring up the controls; **✕** (first on the bar) closes the reader. In Book, Focus and Cinema, swipe to turn pages.
+- **C** reads the conversation again (after new answers). With text selected, only the selection opens.
+- The capture is the browser extension's own code (`extract()` in `extension/browser/background.js`): ChatGPT and Claude are read from the API the page itself uses, with your sign-in; Gemini is read from the page, scrolling up first so older turns load. Nothing is sent anywhere; the reader runs in a frame of the same page.
+- Using the ChatGPT, Claude or Gemini **app**? Conversations sync, so open the same chat in Safari (it's in the sidebar history) and tap the tab there.
+- Not on iOS: PDF, EPUB and Word files, Mermaid diagrams (shown as their source), and the Claude Code features. Those need the desktop app.
+
+Set up, once:
+
+1. Install **Userscripts** from the App Store and open it once. It asks where to keep scripts; the default folder is fine.
+2. Turn it on: **Settings → Apps → Safari → Extensions → Userscripts**: on, and **Allow** for chatgpt.com, claude.ai and gemini.google.com (or All Websites).
+3. In Safari, download [glass-reader.user.js](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.user.js). Then in the **Files** app, move it from Downloads into the **Userscripts** folder.
+4. Open a conversation in Safari and tap the READ tab on the right edge.
+
+Updating: download the new file and replace the old one in the Userscripts folder. Building it yourself: `npm run build:ios`, then `npm run serve:ios` prints an address to open on the iPad (same Wi-Fi; on campus and guest networks that keep devices apart, send yourself the file instead). Home Screen web apps don't run Safari extensions, so open the chats in a Safari tab (pinned tabs work). Desktop userscript managers (Tampermonkey, Violentmonkey) run the same file.
+
+## Android: ChatGPT, Claude and Gemini apps
+
+The Android app reads conversations straight from the **apps**, and opens anything you share or select. It is the same reader (layouts, themes, maths, tables, code) running in a full-screen view.
+
+- **Read button.** Turn on *Reading from the screen* (the welcome card has a button; Android asks you to allow Glass Reader under Accessibility). In a ChatGPT, Claude or Gemini chat a small glass button sits on the right edge (drag it up or down; drag it onto the ✕ that appears at the bottom to hide it for 10 minutes, and tap the notification to bring it back sooner). Tap it: Glass Reader scrolls to the top of the chat, back down screen by screen, and opens the **whole conversation** at the latest answer. Tap the dimmed screen to stop. It only looks at those three apps, only when you tap the button, and nothing leaves the phone.
+- **Share or select.** Share a message, a file (PDF, EPUB, Word, Markdown, text) or a link to Glass Reader, or select text and pick **Glass Reader** in the selection menu. A shared ChatGPT, Claude or Gemini **share link** is opened in the background and read with the browser extension's `extract()`; other links go through Readability.
+- **Tap** shows the controls and they stay until you tap again (12 seconds if you leave them). In Book and Cinema, tap the sides (or swipe) to turn pages; in Focus, swipe. Volume keys turn pages; **Back** goes to the previous document, then closes.
+- **Glass** shows the chat you were reading, blurred (a picture taken when you tapped Read).
+
+What the screen gives, and what it doesn't: headings, lists (nested), tables, code with its language, quotes, Gemini's maths and bold in Claude come through. ChatGPT and Gemini don't expose bold, link addresses are not on screen, Claude's maths arrives as spoken text ("fraction V 100"), and Gemini numbered lists come out as bullets. For a perfect copy, use the app's share link.
+
+Build and install (needs a JDK 17+ and the Android SDK; USB debugging on):
+
+```bash
+npm run build:android                # → dist/glass-reader.apk
+npm run build:android -- --install   # and install it on the phone connected over USB
+```
+
+It uses `~/Android/jdk` and `~/Android/Sdk` unless `JAVA_HOME` / `ANDROID_HOME` are set. Without a cable, copy `dist/glass-reader.apk` to the phone and open it (Android asks to allow installing from that app once). The build copies `renderer/`, the fonts and libraries from `node_modules/` (run `npm install` first) and the extension's `background.js` and `Readability.js` into the app. Reinstalling turns the accessibility service off; `--install` turns it back on, otherwise do it in Settings → Accessibility. Debug builds also take `adb shell am broadcast -a dev.glassreader.READ` (as if the button was tapped) and `-a dev.glassreader.DUMP` (what the screen exposes, to logcat); only adb can send them.
+
+## Linux desktop app
+
+The original: a full-screen overlay for files, plus capture from whatever app has focus.
+
+### Run it
 
 ```bash
 npm install
@@ -32,7 +124,7 @@ bin/glass-reader file.epub  # open a file in the running overlay
 bin/glass-reader --quit
 ```
 
-### Ubuntu: one-time sandbox setup
+#### Ubuntu: one-time sandbox setup
 
 Ubuntu 23.10+ only lets apps with an AppArmor profile use the sandbox Electron needs. Without one, the reader crashes whenever GNOME starts it (hotkeys, autostart, launcher). Add the same kind of profile VS Code and Chrome ship:
 
@@ -40,7 +132,7 @@ Ubuntu 23.10+ only lets apps with an AppArmor profile use the sandbox Electron n
 sudo scripts/install-apparmor.sh        # --uninstall to remove
 ```
 
-### Global hotkey (GNOME / Wayland)
+#### Global hotkey (GNOME / Wayland)
 
 ```bash
 scripts/install-gnome.sh                  # default shortcut: Ctrl+Alt+R
@@ -50,7 +142,7 @@ scripts/install-gnome.sh --uninstall
 
 This adds a launcher entry, starts the reader in the background at login (so the overlay appears instantly), and registers a custom shortcut that runs `--toggle`. On Wayland, apps cannot grab global keys themselves, so GNOME's own shortcut system is the reliable route.
 
-## Ctrl+Alt+C: read what you're looking at
+### Ctrl+Alt+C: read what you're looking at
 
 One key, wherever you are. It reads whatever has focus:
 
@@ -73,7 +165,7 @@ scripts/install-extensions.sh     # VS Code / Cursor extension and the browser h
 
 Then, once in each browser (brave://extensions or chrome://extensions): turn on **Developer mode**, **Load unpacked**, choose `extension/browser`. Browsers don't let a script install extensions. Already-open VS Code / Cursor windows pick their extension up after **Developer: Reload Window**, and existing kitty windows after a restart.
 
-## Claude Code answers
+### Claude Code answers
 
 Long answers are hard to read in a terminal. Glass Reader opens a Claude Code session as one document: the whole conversation, scrolled to the latest answer, with your earlier prompts and answers above it to scroll back to.
 
@@ -96,65 +188,6 @@ The document and the picker use the session's title as Claude Code shows it (you
 Setup: `scripts/install-claude-hook.sh` adds the automatic Stop hook to `~/.claude/settings.json` (`--uninstall` to remove). The shortcuts are set up above.
 
 Tuning: `GR_CLAUDE_MIN_WORDS=400` changes the threshold; `GR_CLAUDE_NOTIFY=0` turns off notifications.
-
-## Browser extension for anyone (Chrome, Edge, Brave)
-
-A version that needs nothing else installed: no desktop app, no shortcuts to set up. Click its toolbar button (or press **Alt+Shift+R**) and the page you're on opens in the reader, laid over it: articles and newsletters, GitHub READMEs, issues and pull requests (as a diff), Google Docs, and whole ChatGPT, Claude and Gemini conversations, opened at the latest answer. Click it again, or press Esc, to put it away; **C** reads the page again (a chat that has grown).
-
-```
-npm run build:extension     # → dist/glass-reader-extension/ and dist/glass-reader-extension.zip
-```
-
-**Give it to someone:** send them the zip. They unzip it, open `chrome://extensions` (`edge://extensions` in Edge), turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder. The button may hide under the puzzle-piece menu; the pin puts it on the toolbar.
-
-**Publish it:** the same zip uploads as-is to the Chrome Web Store (a one-time US$5 developer registration) and to Microsoft Edge Add-ons (free). It asks only for `activeTab` and `scripting`, so the install prompt shows no "read all your data" warning: it sees a page only when you click its button there. The privacy text for the listing is in `extension/standalone/PRIVACY.md`.
-
-It is the same reader as the iPad userscript (`ios/overlay.js`, built with `extension: true`) and reads pages with the same code as the desktop companion (`extension/browser/background.js`, from `captureTab()` on). PDFs and diagrams open in the desktop app only. `npm run test:extension` loads the build into real Chrome (headless), points it at made-up ChatGPT, Claude and Gemini conversations and a blog post with each site's real security headers, and saves screenshots to `extension/standalone/test/out/`.
-
-## iPad and iPhone: ChatGPT, Claude and Gemini conversations
-
-On iOS no app can read another app's screen, so Glass Reader works inside **Safari**, as a userscript run by the free **Userscripts** app (App Store). It doesn't need a Mac, Xcode or a developer account. On a ChatGPT, Claude or Gemini conversation, a small glass tab sits on the right edge. Tap it (or press **Ctrl+Option+C** on a keyboard) and the **whole conversation** opens over the page at the latest answer, with earlier prompts and answers above it. It uses the same reader, layouts, maths, tables and code as the desktop app.
-
-- **Glass** shows the conversation behind the text, blurred. **T** or the theme button cycles through the others.
-- **Tap** to bring up the controls; **✕** (first on the bar) closes the reader. In Book, Focus and Cinema, swipe to turn pages.
-- **C** reads the conversation again (after new answers). With text selected, only the selection opens.
-- The capture is the browser extension's own code (`extract()` in `extension/browser/background.js`): ChatGPT and Claude are read from the API the page itself uses, with your sign-in; Gemini is read from the page, scrolling up first so older turns load. Nothing is sent anywhere; the reader runs in a frame of the same page.
-- Using the ChatGPT, Claude or Gemini **app**? Conversations sync, so open the same chat in Safari (it's in the sidebar history) and tap the tab there.
-- Not on iOS: PDF, EPUB and Word files, Mermaid diagrams (shown as their source), and the Claude Code features. Those need the desktop app.
-
-Set up, once:
-
-```bash
-npm run build:ios     # → dist/glass-reader.user.js
-npm run serve:ios     # prints an address to open on the iPad (same Wi-Fi)
-```
-
-1. Install **Userscripts** from the App Store and open it once. It asks where to keep scripts; the default folder is fine.
-2. Turn it on: **Settings → Apps → Safari → Extensions → Userscripts**: on, and **Allow** for chatgpt.com, claude.ai and gemini.google.com (or All Websites).
-3. In Safari, open the address `serve:ios` printed, open the extensions menu in the address bar (**ᴀA** or the puzzle piece), choose **Userscripts**, then **Install**. If Safari says it couldn't connect, the Wi-Fi keeps devices apart (campus, office and guest networks usually do). Instead, send yourself `dist/glass-reader.user.js` (Google Drive, iCloud Drive on the web, or email) and on the iPad move it into the Userscripts folder in the Files app.
-4. Open a conversation and tap the glass tab on the right edge.
-
-After changing the reader, run `npm run build:ios` again and reinstall. `npm run test:ios` checks the build offline: Electron serves made-up conversations under the three real hostnames, with each site's real security headers (CSP, Trusted Types, cross-origin isolation), taps the tab and saves screenshots to `ios/test/out/`. Desktop userscript managers (Tampermonkey, Violentmonkey) run the same file.
-
-## Android: ChatGPT, Claude and Gemini apps
-
-The Android app reads conversations straight from the **apps**, and opens anything you share or select. It is the same reader (layouts, themes, maths, tables, code) running in a full-screen view.
-
-- **Read button.** Turn on *Reading from the screen* (the welcome card has a button; Android asks you to allow Glass Reader under Accessibility). In a ChatGPT, Claude or Gemini chat a small glass button sits on the right edge (drag it up or down; drag it onto the ✕ that appears at the bottom to hide it for 10 minutes, and tap the notification to bring it back sooner). Tap it: Glass Reader scrolls to the top of the chat, back down screen by screen, and opens the **whole conversation** at the latest answer. Tap the dimmed screen to stop. It only looks at those three apps, only when you tap the button, and nothing leaves the phone.
-- **Share or select.** Share a message, a file (PDF, EPUB, Word, Markdown, text) or a link to Glass Reader, or select text and pick **Glass Reader** in the selection menu. A shared ChatGPT, Claude or Gemini **share link** is opened in the background and read with the browser extension's `extract()`; other links go through Readability.
-- **Tap** shows the controls and they stay until you tap again (12 seconds if you leave them). In Book and Cinema, tap the sides (or swipe) to turn pages; in Focus, swipe. Volume keys turn pages; **Back** goes to the previous document, then closes.
-- **Glass** shows the chat you were reading, blurred (a picture taken when you tapped Read).
-
-What the screen gives, and what it doesn't: headings, lists (nested), tables, code with its language, quotes, Gemini's maths and bold in Claude come through. ChatGPT and Gemini don't expose bold, link addresses are not on screen, Claude's maths arrives as spoken text ("fraction V 100"), and Gemini numbered lists come out as bullets. For a perfect copy, use the app's share link.
-
-Build and install (needs a JDK 17+ and the Android SDK; USB debugging on):
-
-```bash
-npm run build:android                # → dist/glass-reader.apk
-npm run build:android -- --install   # and install it on the phone connected over USB
-```
-
-It uses `~/Android/jdk` and `~/Android/Sdk` unless `JAVA_HOME` / `ANDROID_HOME` are set. Without a cable, copy `dist/glass-reader.apk` to the phone and open it (Android asks to allow installing from that app once). The build copies `renderer/`, the fonts and libraries from `node_modules/` (run `npm install` first) and the extension's `background.js` and `Readability.js` into the app. Reinstalling turns the accessibility service off; `--install` turns it back on, otherwise do it in Settings → Accessibility. Debug builds also take `adb shell am broadcast -a dev.glassreader.READ` (as if the button was tapped) and `-a dev.glassreader.DUMP` (what the screen exposes, to logcat); only adb can send them.
 
 ## Formats
 
@@ -197,6 +230,27 @@ Test files: `samples/diagrams.md` (Mermaid, local image, inline SVG) and `sample
 Line height is derived from text size and line width, so every combination stays comfortable. `L` only nudges it.
 
 Your reading position is saved per document and restored when you reopen it.
+
+## Build from source
+
+Needs Node.js 20+.
+
+```bash
+npm install
+npm run build:extension   # → dist/glass-reader-extension/ and dist/glass-reader-extension.zip
+npm run build:ios         # → dist/glass-reader.user.js
+npm run serve:ios         # hands that file to an iPad on the same Wi-Fi
+npm run build:android     # → dist/glass-reader.apk (needs a JDK 17+ and the Android SDK)
+npm start                 # the desktop app
+```
+
+Tests, offline, with screenshots:
+
+```bash
+npm run test:extension    # the extension in real Chrome (headless), against made-up ChatGPT, Claude,
+                          # Gemini and blog pages with each site's real security headers
+npm run test:ios          # the userscript at iPad and iPhone sizes, same pages
+```
 
 ## Layout of the code
 
@@ -247,8 +301,16 @@ scripts/
   make-test-pdf.js          builds samples/test-figures.pdf for testing the PDF cleaner
 ```
 
+## Contributing
+
+Issues and pull requests are welcome. Fork the repo, make your change on a branch, and open a pull request against `main`; changes land after review. See [CONTRIBUTING.md](CONTRIBUTING.md). If a chat or page comes out badly formatted, please open an issue with the line at the bottom of the document ("Read from …"), and a share link if you can.
+
 ## Roadmap
 
 1. Capture from more apps: selected text anywhere (`wl-paste --primary`), Firefox, other terminals.
 2. Accessibility-API (AT-SPI) capture for other apps, with OCR as a fallback.
 3. Optional AI reformatting for badly broken text.
+
+## License
+
+[ISC](LICENSE). Readability.js is Mozilla's, under the Apache License 2.0 ([its license](extension/browser/Readability-LICENSE.md)).
