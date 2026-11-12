@@ -127,6 +127,7 @@ const STATE = `(() => {
     math: D ? D.querySelectorAll('.katex').length : 0,
     imgs: D ? [...D.querySelectorAll('.doc img')].filter((i) => i.complete && i.naturalWidth).length : 0,
     longest: Math.max(0, ...blocks.map((b) => b.textContent.length)),
+    raw: blocks.filter((b) => !b.matches('pre, .code, [class*="code"]') && /<\\/?[A-Za-z][\\w-]*[^>]*>/.test(b.textContent)).length,
     theme: D?.body.dataset.theme,
     fonts: D ? [...D.fonts].filter((x) => x.status === 'loaded').length : 0,
     toast: D?.querySelector('#toast')?.textContent,
@@ -186,7 +187,7 @@ async function main() {
         await sleep(800);
         state.closed = await evaluate(c, s, `document.querySelector('iframe[aria-label="Glass Reader"]').style.display === 'none'`);
       } catch (e) { logs.push('harness: ' + String(e.message || e).slice(0, 300)); }
-      const ok = state.shown && state.blocks > 5 && state.turns === EXPECT[name] && state.longest < 1500 && state.closed && !state.error && !logs.length;
+      const ok = state.shown && state.blocks > 5 && state.turns === EXPECT[name] && state.longest < 1500 && !state.raw && state.closed && !state.error && !logs.length;
       if (!ok) failed++;
       console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`, JSON.stringify(state));
       for (const l of logs) console.log('     ', l);

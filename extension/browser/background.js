@@ -315,12 +315,23 @@ async function extract() {
   const blobData = (b) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(b); });
 
   // ChatGPT's newer answers mix Markdown with its own UI components (<box>, <row>,
-  // <badge>, <divider/>, <AsyncImage/>, <WritingBlock>…). A browser would read
-  // <divider/> as an element left open that swallows the rest of the answer, so turn
-  // them into plain Markdown: containers become line breaks, writing blocks quotes,
-  // badges inline code, and decoration (icons, buttons, stock images) goes.
+  // <badge>, <divider/>, <AsyncImage/>, <AsyncImageGroup/>, <WritingBlock>…). A browser
+  // would read <divider/> as an element left open that swallows the rest of the answer,
+  // so turn them into plain Markdown: containers become line breaks, writing blocks
+  // quotes, badges inline code, pictures ChatGPT looks up as it draws the answer a
+  // caption (or the picture, when the address is there), and icons and buttons go.
+  // Any other CamelCase component (ChatGPT adds new ones) is treated as UI too.
+  const pictures = (tag) => {
+    const urls = [...tag.matchAll(/https?:\/\/[^\s"'<>\]})]+/g)].map((m) => m[0]);
+    if (urls.length) return '\n\n' + urls.slice(0, 8).map((u) => `![](${u})`).join('\n\n') + '\n\n';
+    const words = [];
+    for (const m of tag.matchAll(/\b(quer(?:y|ies)|alt|caption|title|prompt)\s*=\s*(\{[\s\S]*?\}(?=\s+[\w-]+\s*=|\s*\/?>)|"[^"]*"|'[^']*')/g)) {
+      for (const q of m[2].matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'/g)) { const w = (q[1] ?? q[2]).trim(); if (w) words.push(w); }
+    }
+    return words.length ? `\n\n*Picture${words.length > 1 ? 's' : ''}: ${[...new Set(words)].join(' · ')}*\n\n` : '';
+  };
   const uiToMd = (md) => {
-    const UI = /<\/?(box|row|column|stack|grid|grid-item|list|list-item|card|text|badge|title|divider|icon|button|radio-group|radio|checkbox|AsyncImage|WritingBlock|Image|image|link|spacer)\b[^>]*>/;
+    const UI = /<\/?(box|row|column|stack|grid|grid-item|list|list-item|card|text|badge|title|divider|icon|button|radio-group|radio|checkbox|Async\w*|WritingBlock|ImageGroup|Image|image|link|spacer|[A-Z][a-z]+[A-Z]\w*)\b[^>]*>/;
     if (!UI.test(md)) return md;
     const BLOCK = /^(box|row|column|stack|grid|grid-item|list|card|radio-group)$/;
     const out = [];
@@ -336,7 +347,10 @@ async function extract() {
       }
     }
     // Only outside code: split on fences, convert the even (prose) parts.
+    const ATTRS = `(?:"[^"]*"|'[^']*'|\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}|[^>"'{])*?`; // values may hold ">"
     return out.join('\n').split(/(^[ \t]*(?:`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]*(?:`{3,}|~{3,})[ \t]*$)/m).map((part, i) => (i % 2 ? part : part
+      .replace(new RegExp(`<((?:Async\\w*|ImageGroup|Image))\\b(${ATTRS})>([\\s\\S]*?)<\\/\\1>`, 'g'), (t) => pictures(t))
+      .replace(new RegExp(`<(?:Async\\w*|ImageGroup|Image)\\b${ATTRS}\\/>`, 'g'), (t) => pictures(t))
       .replace(/<WritingBlock\b[^>]*>([\s\S]*?)<\/WritingBlock>/g, (_, t) => '\n\n' + t.trim().split('\n').map((l) => '> ' + l.trim()).join('\n') + '\n\n')
       .replace(/<button\b[^>]*>[\s\S]*?<\/button>/g, '')
       .replace(/<title\b[^>]*>([\s\S]*?)<\/title>/g, (_, t) => `**${t.trim()}**`)

@@ -85,6 +85,7 @@ async function run(name, url, [w, h]) {
       math: f?.contentDocument.querySelectorAll('.katex').length,
       imgs: f ? [...f.contentDocument.querySelectorAll('.doc img')].filter((i) => i.complete && i.naturalWidth).length : 0,
       longest: doc ? Math.max(...doc.blocks.map((b) => (b.text || '').length)) : 0, // one giant paragraph = formatting lost
+      raw: doc ? doc.blocks.filter((b) => b.type !== 'code' && /<\\/?[A-Za-z][\\w-]*[^>]*>/.test(b.text || '')).length : 0, // markup shown as text
       pos: gr?.st.pos, theme: B?.dataset.theme,
       fonts: f && [...f.contentDocument.fonts].filter((x) => x.status === 'loaded').length,
       toast: f?.contentDocument.querySelector('#toast')?.textContent,
@@ -122,7 +123,7 @@ app.whenReady().then(async () => {
       const name = `${site}-${size}`;
       if (only.length && !only.includes(name)) continue;
       const { state, errors } = await run(name, url, dims).catch((e) => ({ state: {}, errors: ['harness: ' + (e.stack || e).toString().slice(0, 400)] }));
-      const ok = state.shown && state.blocks > 5 && state.turns === F.expectTurns[site] && state.longest < 1500 && state.closed && !errors.length;
+      const ok = state.shown && state.blocks > 5 && state.turns === F.expectTurns[site] && state.longest < 1500 && !state.raw && state.closed && !errors.length;
       if (!ok) failed++;
       console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`, JSON.stringify(state));
       for (const e of errors) console.log('     ', e);
