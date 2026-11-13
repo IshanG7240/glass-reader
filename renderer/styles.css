@@ -527,6 +527,13 @@ body.fetching #stage, body.fetching #hud, body.fetching #welcome { visibility: h
   background: var(--panel); border: 1px solid var(--panel-line); border-top: 0; border-bottom: 0; border-left-width: 1px;
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--mark) 70%, transparent);
 }
+/* Code in a prompt: inside the card, inset. */
+.doc pre.pq {
+  margin: 0; padding: 0.2em 1.33em 0.75em; border: 1px solid var(--panel-line); border-top: 0; border-bottom: 0; border-radius: 0;
+  background: var(--panel); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--mark) 70%, transparent); font-size: 0.82em;
+}
+.doc pre.pq code { display: block; padding: 0.6em 0.8em; border-radius: 8px; background: color-mix(in srgb, var(--fg) 6%, transparent); }
+.doc pre.pq-end { border-bottom: 1px solid var(--panel-line); border-radius: 0 0 16px 16px; margin-bottom: 1.5em; }
 .doc blockquote.pq-end { border-bottom: 1px solid var(--panel-line); border-radius: 0 0 16px 16px; padding-bottom: 1em; margin-bottom: 1.5em; }
 .doc p.meta { font: 500 12px/1 var(--ui); letter-spacing: 0.04em; color: var(--fg-faint); margin: -0.6em 0 1.6em 0.2em; }
 .doc p.meta em { font-style: normal; }

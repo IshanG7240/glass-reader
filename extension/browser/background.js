@@ -291,11 +291,16 @@ async function extract() {
   // notes keep their shape: "•" bullets (alone on a line, or before the text) become a list.
   const promptParts = (prompt) => {
     const L = prompt.replace(/\r/g, '').split('\n'), tidy = [];
+    // A bullet alone on its line ("•", or Markdown's "-" / "*" with the text on the next
+    // line, which Markdown reads as an empty item) takes the text that follows.
+    let fence = false;
     for (let i = 0; i < L.length; i++) {
-      if (/^\s*[•◦▪●‣∙]\s*$/.test(L[i])) {
+      if (/^\s*(`{3,}|~{3,})/.test(L[i])) fence = !fence;
+      const b = !fence && L[i].match(/^(\s*)[-*+•◦▪●‣∙]\s*$/);
+      if (b) {
         let j = i + 1;
         while (j < L.length && !L[j].trim()) j++;
-        if (j < L.length) { tidy.push('- ' + L[j].trim()); i = j; continue; }
+        if (j < L.length && !/^\s*([-*+•◦▪●‣∙]\s*$|(`{3,}|~{3,})|#{1,6}\s)/.test(L[j])) { tidy.push(`${b[1]}- ${L[j].trim()}`); i = j; continue; }
       }
       tidy.push(L[i].replace(/^(\s*)[•◦▪●‣∙]\s+/, '$1- '));
     }

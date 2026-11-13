@@ -275,7 +275,7 @@ export function htmlToBlocks(root, opts = {}) {
     else if (t === 'pre') {
       const cls = `${el.className} ${el.querySelector('code')?.className || ''}`;
       if (/\b(language-)?mermaid\b/.test(cls)) pushDiagram('mermaid', el.textContent);
-      else blocks.push({ type: 'code', text: el.textContent.replace(/\n+$/, ''), lang: (cls.match(/\blanguage-([\w+-]+)/) || [])[1] || '' });
+      else blocks.push({ type: 'code', text: el.textContent.replace(/\n+$/, ''), lang: (cls.match(/\blanguage-([\w+-]+)/) || [])[1] || '', ...(ctx.quote ? { quote: true } : {}) });
     }
     else if (t === 'blockquote') walk(el, { ...ctx, quote: true });
     else if (t === 'hr') blocks.push({ type: 'hr', text: '' });

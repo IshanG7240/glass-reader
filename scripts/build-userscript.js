@@ -150,7 +150,7 @@ async function main() {
   const header = `// ==UserScript==
 // @name         Glass Reader
 // @namespace    https://github.com/glass-reader
-// @version      ${pkg.version}.${new Date().toISOString().slice(0, 10).replace(/-/g, '')}
+// @version      ${pkg.version}.${new Date().toISOString().slice(0, 16).replace(/\D/g, '')}
 // @description  Read a whole ChatGPT, Claude or Gemini conversation on one calm sheet of glass.
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*

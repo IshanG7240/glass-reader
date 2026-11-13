@@ -124,7 +124,8 @@ function chatgptImageConversation() {
   const add = (message) => { const id = 'm' + n++; mapping[id] = { parent, message }; parent = id; };
   QUESTIONS.slice(0, 4).forEach((q, i) => {
     // Pasted notes as a prompt: a Markdown heading first, bullets alone on their lines.
-    if (i === 3) q = `#### ${q}\n\nFrom my notes:\n\n•\n\n**Diagonal form:** easy powers.\n\n•\n\n**Change of basis:** same map.\n\nExplain please.`;
+    // (Both kinds: "•" pasted as text, and Markdown bullets with their text on the next line.)
+    if (i === 3) q = `#### ${q}\n\nFrom my notes:\n\n•\n\n**Diagonal form:** easy powers.\n\n*\n**Change of basis:** same map:\n\n    *\n    **Short times:** \`t<τ\`, springy.\n\n\`\`\`\nη ~ G0 τ\n\`\`\`\n\n*\nAlso the graph on slide 15.\n\nExplain please.`;
     add({ author: { role: 'user' }, content: { content_type: 'text', parts: [q] } });
     if (i === 1 || i === 2) {
       // Image generation: the assistant calls the tool, the tool returns the picture.

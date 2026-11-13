@@ -195,13 +195,13 @@ function tidyTurns(doc) {
     if (!b.anchor?.startsWith('gr-turn')) continue;
     let j = i + 1;
     const qs = [];
-    while (bs[j]?.type === 'quote') qs.push(bs[j++]);
+    while (bs[j]?.type === 'quote' || bs[j]?.type === 'code' && bs[j].quote) qs.push(bs[j++]); // code in a prompt stays in its card
     // Drop a paragraph that is just the paragraphs after it run together, and repeats.
     for (let k = 0; k < qs.length; k++) {
       const rest = flat(qs.slice(k + 1).map((q) => q.text).join(' '));
       if (rest && flat(qs[k].text) === rest) { qs.splice(k, 1); k--; }
     }
-    for (let k = 1; k < qs.length; k++) if (flat(qs[k].text) === flat(qs[k - 1].text)) qs.splice(k--, 1);
+    for (let k = 1; k < qs.length; k++) if (qs[k].type === 'quote' && flat(qs[k].text) === flat(qs[k - 1].text)) qs.splice(k--, 1);
     // The heading is the prompt's first line; the card shows it once, then the rest.
     if (qs[0]?.html?.startsWith(b.html) && flat(qs[0].text).length > flat(b.text).length) {
       qs[0].html = qs[0].html.slice(b.html.length).replace(/^(\s|<br>)+/, '');
