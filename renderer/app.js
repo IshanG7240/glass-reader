@@ -1083,7 +1083,10 @@ addEventListener('mousemove', poke, { passive: true });
 
 // Image diagnostics (visible with GR_DEBUG=1).
 document.addEventListener('error', (e) => {
-  if (e.target.tagName === 'IMG') console.warn('image failed to load:', e.target.src.slice(0, 140));
+  if (e.target.tagName !== 'IMG') return;
+  console.warn('image failed to load:', e.target.src.slice(0, 140));
+  // A picture that won't load (an expired or blocked link): its caption stays, the broken box goes.
+  if (e.target.closest('figure, .chunk, .cine-card')) e.target.style.display = 'none';
 }, true);
 document.addEventListener('load', (e) => {
   if (e.target.tagName === 'IMG') console.debug('image loaded:', e.target.src.slice(0, 80), e.target.naturalWidth + 'x' + e.target.naturalHeight);

@@ -75,7 +75,10 @@ function claudeConversation() {
   QUESTIONS.forEach((q, i) => {
     const u = `00000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`, a = `00000000-0000-4000-8000-0000000002${String(i).padStart(2, '0')}`;
     msgs.push({ uuid: u, parent_message_uuid: parent, sender: 'human', index: i * 2, content: [{ type: 'text', text: q }] });
-    msgs.push({ uuid: a, parent_message_uuid: u, sender: 'assistant', index: i * 2 + 1, content: [{ type: 'text', text: answer(i) }] });
+    // With web search, a sentence arrives in pieces, each with the sources it cites.
+    const content = i === 0 ? [{ type: 'text', text: answer(i) + '\n\nEigenvalues were named by ' }, { type: 'text', text: 'David Hilbert in 1904', citations: [{ url: 'https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors', title: 'Eigenvalues' }] }, { type: 'text', text: ', from the German *eigen*.' }]
+      : [{ type: 'text', text: answer(i) }];
+    msgs.push({ uuid: a, parent_message_uuid: u, sender: 'assistant', index: i * 2 + 1, content });
     parent = a;
   });
   return { name: 'Eigenvalues, intuitively', current_leaf_message_uuid: parent, chat_messages: msgs };
@@ -120,6 +123,8 @@ function chatgptImageConversation() {
   let parent = 'root', n = 0;
   const add = (message) => { const id = 'm' + n++; mapping[id] = { parent, message }; parent = id; };
   QUESTIONS.slice(0, 4).forEach((q, i) => {
+    // Pasted notes as a prompt: a Markdown heading first, bullets alone on their lines.
+    if (i === 3) q = `#### ${q}\n\nFrom my notes:\n\n•\n\n**Diagonal form:** easy powers.\n\n•\n\n**Change of basis:** same map.\n\nExplain please.`;
     add({ author: { role: 'user' }, content: { content_type: 'text', parts: [q] } });
     if (i === 1 || i === 2) {
       // Image generation: the assistant calls the tool, the tool returns the picture.
@@ -129,7 +134,13 @@ function chatgptImageConversation() {
     }
     // ChatGPT's newer UI markup inside an answer (self-closing tags a browser would leave open).
     const ui = i === 1 ? `\n\n<box border radius="lg" padding={3} gap={2}>\n  **Worked example**\n  <row align=center gap={3}>\n    <AsyncImage query="matrix" aspectRatio="1:1" maxWidth="64px"/>\n    <box flex="1" gap={1}>\n      **A shear**\n\n      <text color="secondary" size="sm">One repeated eigenvalue</text>\n      <badge color="success">Defective</badge>\n    </box>\n  </row>\n  <divider color="subtle"/>\n  Only one direction survives.\n</box>\n\n<AsyncImageGroup\n  queries={["eigenvector arrows diagram", "shear matrix grid"]}\n  layout="carousel" onSelect={(i) => i > 0}\n/>\n\n<WritingBlock id="1" variant="standard">A note to copy.\nSecond line.</WritingBlock>\n\n### After the components\n\nThis paragraph must stay a separate, formatted paragraph with **bold** text.` : '';
-    add({ author: { role: 'assistant' }, content: { content_type: 'text', parts: [answer(i) + ui] } });
+    // A study widget (a template ChatGPT runs as you click) and cited sources.
+    const quiz = i === 2 ? `\n\nThe determinant is zero exactly when\ue200cite\ue202turn0search0\ue202turn0search2\ue201 the matrix squashes space.\ue200image_group\ue202{"query":["determinant area"]}\ue201\n\n<box border padding={3}>\n{@body const questions=[{q:"What is det of a rotation?",opts:["0","1","-1"],a:1,why:"Rotations keep area."},{q:"A singular matrix has det…",opts:["1","0"],a:1,why:"It flattens space."}]}\n{@body const [answers,setAnswers]=DIL.useState({})}\n{@body const [submitted,setSubmitted]=DIL.useState(false)}\n{#each questions as q,i}\n  **Q{i+1}. {q.q}**\n  <radio-group value={answers[i]} onChange={(v)=>setAnswers(p=>({...p,[i]:Number(v)}))}>\n    {#each q.opts as opt,j}<radio value={String(j)} label={opt}/>{/each}\n  </radio-group>\n  {#if submitted}{#if answers[i]===q.a}**Correct**{:else}**Incorrect — {q.opts[q.a]}**{/if}\n  {q.why}{/if}\n{/each}\n{#if submitted}**Score: {questions.filter((q,i)=>answers[i]===q.a).length}/2**{:else}<button onClick={()=>setSubmitted(true)}>Check</button>{/if}\n</box>\n\n**Remember:** det = area scale.` : '';
+    const refs = i === 2 ? { content_references: [
+      { matched_text: '\ue200cite\ue202turn0search0\ue202turn0search2\ue201', type: 'grouped_webpages', items: [{ title: 'Determinant', url: 'https://en.wikipedia.org/wiki/Determinant', attribution: 'Wikipedia' }] },
+      { matched_text: '\ue200image_group\ue202{"query":["determinant area"]}\ue201', type: 'image_group', images: [{ title: 'Area', thumbnail_url: 'https://chatgpt.com/files/area.png' }] },
+    ] } : {};
+    add({ author: { role: 'assistant' }, content: { content_type: 'text', parts: [answer(i) + ui + quiz] }, metadata: refs });
   });
   return { title: 'Eigenvalues with pictures', current_node: parent, mapping };
 }
@@ -155,6 +166,10 @@ exports.sites = {
     },
     routes: [
       { match: new RegExp(`^/c/${CHATGPT_DOM_ID}`), body: html('Eigenvalues from the page | ChatGPT', `<div style="height:100vh;overflow-y:auto"><main>${QUESTIONS.slice(0, 5).map((_, i) => gptDomTurn(i)).join('')}</main></div>`) },
+      // The page with pictures: it has drawn one of the answer's pictures, and looked one up.
+      { match: new RegExp(`^/c/${CHATGPT_IMG_ID}`), body: html('Eigenvalues with pictures | ChatGPT', `${transcript(4)}
+<div data-message-author-role="assistant" data-message-id="m5"><img src="/files/matrix.png" width="200" height="150" alt=""></div>
+<script nonce="${NONCE}">fetch('/backend-api/search/images?q=' + encodeURIComponent('matrix') + '&n=3');</script>`) },
       { match: /^\/c\//, body: html('Eigenvalues, intuitively | ChatGPT', transcript(8)) },
       { match: /^\/api\/auth\/session$/, body: { accessToken: 'test-token' } },
       { match: new RegExp(`^/backend-api/conversation/${CHATGPT_DOM_ID}$`), body: { __status: 401 } },
@@ -162,6 +177,7 @@ exports.sites = {
       { match: /^\/backend-api\/conversation\/[\w-]+\/textdocs$/, body: [] },
       { match: /^\/backend-api\/conversation\/[\w-]+$/, body: chatgptConversation },
       { match: /^\/backend-api\/files\/download\/file_\w+$/, body: (u) => ({ download_url: `/files/${u.pathname.split('/').pop()}.png` }) },
+      { match: /^\/backend-api\/search\/images$/, body: (u) => ({ results: [{ title: u.searchParams.get('q'), thumbnail_url: `/files/found-${u.searchParams.get('q').replace(/\W+/g, '-')}.png` }] }) },
       { match: /^\/files\/.+\.png$/, body: PNG },
     ],
   },
@@ -194,4 +210,6 @@ exports.pages = {
   'chatgpt-images': `https://chatgpt.com/c/${CHATGPT_IMG_ID}`,
   'chatgpt-page': `https://chatgpt.com/c/${CHATGPT_DOM_ID}`,
 };
+// Pictures the reader should show (at least).
+exports.expectImages = { 'chatgpt-images': 6 };
 exports.expectTurns = { chatgpt: QUESTIONS.length, claude: QUESTIONS.length, gemini: QUESTIONS.length, 'chatgpt-images': 4, 'chatgpt-page': 5 };

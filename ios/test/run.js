@@ -70,7 +70,9 @@ async function run(name, url, [w, h]) {
   await shot('1-page');
 
   // Tap the glass tab on the right edge.
-  for (const type of ['mouseDown', 'mouseUp']) win.webContents.sendInputEvent({ type, x: w - 18, y: Math.round(h / 2), button: 'left', clickCount: 1 });
+  // The window may come out smaller than asked (taller than the screen): tap where the tab really is.
+  const [cw, ch] = await win.webContents.executeJavaScript('[innerWidth, innerHeight]');
+  for (const type of ['mouseDown', 'mouseUp']) win.webContents.sendInputEvent({ type, x: cw - 18, y: Math.round(ch / 2), button: 'left', clickCount: 1 });
   await sleep(4500);
   const state = await js('state', `(() => {
     const f = document.querySelector('iframe[aria-label="Glass Reader"]');
@@ -86,6 +88,9 @@ async function run(name, url, [w, h]) {
       imgs: f ? [...f.contentDocument.querySelectorAll('.doc img')].filter((i) => i.complete && i.naturalWidth).length : 0,
       longest: doc ? Math.max(...doc.blocks.map((b) => (b.text || '').length)) : 0, // one giant paragraph = formatting lost
       raw: doc ? doc.blocks.filter((b) => b.type !== 'code' && /<\\/?[A-Za-z][\\w-]*[^>]*>/.test(b.text || '')).length : 0, // markup shown as text
+      // template code, citation markers or Markdown syntax shown as text
+      junk: doc ? doc.blocks.filter((b) => b.type !== 'code' && /\\{[@#/:][a-z]|[\\ue200-\\ue2ff]|【|^#{1,6}\\s/.test(b.text || '')).map((b) => b.text.slice(0, 60)) : [],
+      dump: doc ? doc.blocks.map((b) => b.type.padEnd(6) + (b.type === 'img' ? b.src.slice(0, 60) + ' ' + b.alt : b.text)).join('\\n') : '',
       pos: gr?.st.pos, theme: B?.dataset.theme,
       fonts: f && [...f.contentDocument.fonts].filter((x) => x.status === 'loaded').length,
       toast: f?.contentDocument.querySelector('#toast')?.textContent,
@@ -93,6 +98,8 @@ async function run(name, url, [w, h]) {
     };
   })()`);
   await shot('2-reader');
+  fs.writeFileSync(path.join(OUT, `${name}.txt`), state.dump || ''); // what the reader made of it, block by block
+  delete state.dump;
 
   // Scroll to the top of the conversation, to see the earlier turns.
   await js('scroll', `document.querySelector('iframe[aria-label="Glass Reader"]').contentDocument.querySelector('.scroller')?.scrollTo(0, 0)`);
@@ -123,7 +130,7 @@ app.whenReady().then(async () => {
       const name = `${site}-${size}`;
       if (only.length && !only.includes(name)) continue;
       const { state, errors } = await run(name, url, dims).catch((e) => ({ state: {}, errors: ['harness: ' + (e.stack || e).toString().slice(0, 400)] }));
-      const ok = state.shown && state.blocks > 5 && state.turns === F.expectTurns[site] && state.longest < 1500 && !state.raw && state.closed && !errors.length;
+      const ok = state.shown && state.blocks > 5 && state.turns === F.expectTurns[site] && state.imgs >= (F.expectImages[site] || 0) && state.longest < 1500 && !state.raw && !state.junk.length && state.closed && !errors.length;
       if (!ok) failed++;
       console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`, JSON.stringify(state));
       for (const e of errors) console.log('     ', e);

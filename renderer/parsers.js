@@ -201,7 +201,7 @@ function hasBlockChild(el) {
   for (const c of el.children) {
     const t = c.localName.toLowerCase();
     if (BLOCK.has(t) || t === 'img' || t === 'svg' || isDisplayMath(c)) return true;
-    if ((t.includes('-') || t === 'del' || t === 'ins') && hasBlockChild(c)) return true; // a wrapper around blocks
+    if ((!INLINE_OK.has(t) || t === 'a' || t === 'del' || t === 'ins') && hasBlockChild(c)) return true; // a wrapper around blocks
   }
   return false;
 }
@@ -252,7 +252,9 @@ export function htmlToBlocks(root, opts = {}) {
       let marker = ordered ? `${n}.` : ['•', '◦', '▪'][depth % 3];
       if (box) { marker = box.hasAttribute('checked') ? '☑' : '☐'; box.remove(); }
       const text = norm(clone.textContent);
-      if (text) blocks.push({ type: 'li', html: sanitize(clone, INLINE_OK), text, marker, depth });
+      // In a quote (a chat prompt), a list stays part of the quote: marker and all.
+      if (text && ctx.quote) blocks.push({ type: 'quote', html: `${'&emsp;'.repeat(depth)}${marker} ${sanitize(clone, INLINE_OK)}`, text: `${marker} ${text}` });
+      else if (text) blocks.push({ type: 'li', html: sanitize(clone, INLINE_OK), text, marker, depth });
       for (const img of clone.querySelectorAll('img')) pushImg(img);
       for (const sub of li.querySelectorAll(':scope > ul, :scope > ol, :scope > * > ul, :scope > * > ol')) {
         list(sub, ctx, sub.localName.toLowerCase() === 'ol', depth + 1);
@@ -264,7 +266,8 @@ export function htmlToBlocks(root, opts = {}) {
   const block = (el, t, ctx) => {
     if (/^h[1-6]$/.test(t)) {
       const text = norm(el.textContent);
-      if (text) blocks.push({ type: t, html: sanitize(el, INLINE_OK), text, ...(/^gr-/.test(el.id) ? { anchor: el.id } : {}) });
+      if (text && ctx.quote) blocks.push({ type: 'quote', html: `<strong>${sanitize(el, INLINE_OK)}</strong>`, text });
+      else if (text) blocks.push({ type: t, html: sanitize(el, INLINE_OK), text, ...(/^gr-/.test(el.id) ? { anchor: el.id } : {}) });
     } else if (['p', 'dt', 'dd', 'figcaption', 'summary', 'address'].includes(t)) {
       if (hasBlockChild(el) && t === 'p') walk(el, ctx); else pushPara(el, ctx);
     } else if (t === 'ul' || t === 'ol') list(el, ctx, t === 'ol', 0);
@@ -301,8 +304,10 @@ export function htmlToBlocks(root, opts = {}) {
       if (SKIP.has(t)) continue;
       if (t === 'img') { flush(ctx); pushImg(n); continue; }
       // Wrappers that hold blocks count as blocks too: custom elements (GitHub puts each
-      // table in <markdown-accessiblity-table>) and <del>/<ins> around whole paragraphs.
-      const wraps = (t.includes('-') || t === 'del' || t === 'ins' || t === 'span' || t === 'a') && hasBlockChild(n);
+      // table in <markdown-accessiblity-table>), <del>/<ins> around whole paragraphs, and
+      // any unknown element (a stray <thing> left open holds everything after it; read
+      // as inline, the rest of the document would become one paragraph).
+      const wraps = (!INLINE_OK.has(t) || t === 'del' || t === 'ins' || t === 'a') && hasBlockChild(n);
       if (!BLOCK.has(t) && !wraps) { (buf ??= document.createElement('div')).append(n.cloneNode(true)); continue; }
       flush(ctx);
       const from = blocks.length;
