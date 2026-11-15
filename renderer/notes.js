@@ -86,6 +86,7 @@ export function initNotes({ store, toast, doc, jump, where = '' }) {
   const list = panel.querySelector('.notes-list');
   const compose = panel.querySelector('.notes-compose textarea');
   const head = panel.querySelector('.notes-head');
+  const collapseBtn = panel.querySelector('[data-n="collapse"]');
   const confirmBar = panel.querySelector('.notes-confirm');
   const whereEl = panel.querySelector('.notes-where');
   whereEl.textContent = where ? `Saved in ${where}` : '';
@@ -93,21 +94,29 @@ export function initNotes({ store, toast, doc, jump, where = '' }) {
 
   // ---------- geometry ----------
 
+  // Collapsed, the panel tucks into the bottom-right corner as a small tab; expanding
+  // puts it back where it was, at the size it was.
   function place() {
+    panel.classList.toggle('collapsed', ui.collapsed);
+    panel.hidden = !ui.open;
+    head.title = ui.collapsed ? 'Open the notes' : 'Drag to move · double-click to tuck it into the corner';
+    collapseBtn.title = ui.collapsed ? 'Open the notes' : 'Tuck into the corner';
+    if (ui.collapsed) {
+      Object.assign(panel.style, { left: '', top: '', width: '', height: '' });
+      return;
+    }
     const w = clamp(ui.w, MIN_W, innerWidth - 2 * MARGIN);
     const h = clamp(ui.h, MIN_H, innerHeight - 2 * MARGIN);
     if (ui.x == null) ui.x = innerWidth - w - 24;
     const x = clamp(ui.x, MARGIN, innerWidth - w - MARGIN);
-    const y = clamp(ui.y, MARGIN, innerHeight - (ui.collapsed ? HEAD_H : h) - MARGIN);
-    Object.assign(panel.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: ui.collapsed ? '' : h + 'px' });
-    panel.classList.toggle('collapsed', ui.collapsed);
-    panel.hidden = !ui.open;
+    const y = clamp(ui.y, MARGIN, innerHeight - h - MARGIN);
+    Object.assign(panel.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
   }
   addEventListener('resize', place);
 
   // Drag by the header (not its buttons).
   head.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || e.target.closest('button')) return;
+    if (e.button !== 0 || e.target.closest('button') || ui.collapsed) return;
     e.preventDefault();
     const r = panel.getBoundingClientRect();
     const dx = e.clientX - r.left, dy = e.clientY - r.top;
@@ -125,7 +134,9 @@ export function initNotes({ store, toast, doc, jump, where = '' }) {
     head.addEventListener('pointerup', up, { once: true });
     head.addEventListener('pointercancel', up, { once: true });
   });
-  head.addEventListener('dblclick', (e) => { if (!e.target.closest('button')) setCollapsed(!ui.collapsed); });
+  head.addEventListener('dblclick', (e) => { if (!e.target.closest('button') && !ui.collapsed) setCollapsed(true); });
+  // The tucked-away tab opens with one click anywhere on it.
+  head.addEventListener('click', (e) => { if (ui.collapsed && !e.target.closest('button')) setCollapsed(false); });
 
   // Resize from the edges and bottom corners.
   for (const g of panel.querySelectorAll('.notes-grip')) {

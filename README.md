@@ -53,7 +53,7 @@ Tap or move the mouse to bring up the control bar. With a keyboard:
 
 Your place in each document is remembered. More in [Layouts](#layouts).
 
-**Notes.** Select a passage and press `S` to keep it in the notes panel; write your own notes in the box at its foot (Enter adds one, Shift+Enter starts a new line), and add a thought under any kept passage. Click a kept passage to go back to it. The panel floats over the page: drag it by its header, resize it from its sides and bottom corners, collapse it to its header (the chevron, or double-click the header). **This doc** shows the open document's notes, **All** every note; the copy button puts them on the clipboard as Markdown, and the bin button deletes all of them (it asks first). The panel's foot says where they are kept.
+**Notes.** Select a passage and press `S` to keep it in the notes panel; write your own notes in the box at its foot (Enter adds one, Shift+Enter starts a new line), and add a thought under any kept passage. Click a kept passage to go back to it. The panel floats over the page: drag it by its header, resize it from its sides and bottom corners, collapse it into a small tab in the bottom-right corner (the chevron, or double-click the header; click the tab to bring it back where it was). **This doc** shows the open document's notes, **All** every note; the copy button puts them on the clipboard as Markdown, and the bin button deletes all of them (it asks first). The panel's foot says where they are kept.
 
 **Your settings and notes follow you.** A theme, layout, text size or note set anywhere is the same everywhere in that version of the reader, and never resets:
 
