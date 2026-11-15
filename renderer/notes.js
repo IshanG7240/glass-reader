@@ -4,7 +4,8 @@
 // collapsed to its header. Everything is kept in localStorage: the notes, and where the
 // panel sits.
 //
-//   initNotes({ store, toast, doc: () => ({ id, title } | null), jump: (block, text) => void })
+//   initNotes({ store, toast, doc: () => ({ id, title } | null), jump: (block, text) => void,
+//               where: 'where notes are kept, shown at the panel's foot' })
 //   returns { toggle(), open(), addSelection() }
 
 const NOTES_KEY = 'gr:notes';
@@ -21,7 +22,7 @@ function when(t) {
   return today ? d.toTimeString().slice(0, 5) : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toTimeString().slice(0, 5);
 }
 
-export function initNotes({ store, toast, doc, jump }) {
+export function initNotes({ store, toast, doc, jump, where = '' }) {
   let notes = store.get(NOTES_KEY, []);
   if (!Array.isArray(notes)) notes = [];
   const ui = {
@@ -45,6 +46,9 @@ export function initNotes({ store, toast, doc, jump }) {
         <button data-scope="all" title="Notes from every document">All</button>
       </div>
       <span class="notes-tools">
+        <button data-n="clear" title="Delete all these notes" aria-label="Delete all these notes">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <button data-n="copy" title="Copy these notes as Markdown" aria-label="Copy as Markdown">
           <svg viewBox="0 0 24 24" width="15" height="15"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
         </button>
@@ -60,6 +64,12 @@ export function initNotes({ store, toast, doc, jump }) {
       <div class="notes-list"></div>
       <div class="notes-compose">
         <textarea rows="2" placeholder="Write a note…  Enter adds it · Shift+Enter for a new line"></textarea>
+        <div class="notes-where"></div>
+      </div>
+      <div class="notes-confirm" hidden>
+        <span></span>
+        <button data-n="clear-yes" class="danger">Delete</button>
+        <button data-n="clear-no">Cancel</button>
       </div>
     </div>
     <i class="notes-grip" data-dir="l"></i><i class="notes-grip" data-dir="r"></i><i class="notes-grip" data-dir="b"></i>
@@ -76,6 +86,10 @@ export function initNotes({ store, toast, doc, jump }) {
   const list = panel.querySelector('.notes-list');
   const compose = panel.querySelector('.notes-compose textarea');
   const head = panel.querySelector('.notes-head');
+  const confirmBar = panel.querySelector('.notes-confirm');
+  const whereEl = panel.querySelector('.notes-where');
+  whereEl.textContent = where ? `Saved in ${where}` : '';
+  whereEl.title = where;
 
   // ---------- geometry ----------
 
@@ -240,7 +254,34 @@ export function initNotes({ store, toast, doc, jump }) {
     if (b.dataset.n === 'close') return close();
     if (b.dataset.n === 'collapse') return setCollapsed(!ui.collapsed);
     if (b.dataset.n === 'copy') return copyMarkdown();
+    if (b.dataset.n === 'clear') return askClear();
   });
+
+  // Delete all: the notes in view (this document's, or every one with All), after a
+  // second click in the bar that asks. The desktop app keeps a backup of them anyway.
+  function askClear() {
+    const n = visibleNotes().length;
+    if (!n) return toast('No notes to delete');
+    if (ui.collapsed) setCollapsed(false);
+    const d = current();
+    confirmBar.querySelector('span').textContent = ui.scope === 'all' || !d
+      ? `Delete all ${n} note${n === 1 ? '' : 's'}, from every document?`
+      : `Delete this document's ${n} note${n === 1 ? '' : 's'}?`;
+    confirmBar.hidden = false;
+    confirmBar.querySelector('[data-n="clear-no"]').focus();
+  }
+  confirmBar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-n]');
+    if (!b) return;
+    confirmBar.hidden = true;
+    if (b.dataset.n !== 'clear-yes') return;
+    const gone = new Set(visibleNotes().map((x) => x.id));
+    notes = notes.filter((x) => !gone.has(x.id));
+    saveNotes();
+    render();
+    toast(`Deleted ${gone.size} note${gone.size === 1 ? '' : 's'}${/notes.json$/.test(where) ? ' · a backup is in the backups folder next to notes.json' : ''}`);
+  });
+  confirmBar.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); confirmBar.hidden = true; } });
 
   function markdown() {
     const shown = visibleNotes();
@@ -353,5 +394,13 @@ export function initNotes({ store, toast, doc, jump }) {
     addSelection,
     hasSelection: () => !!pageSelection(),
     refresh: () => { if (ui.open) render(); }, // a new document was opened
+    // Notes or the panel changed elsewhere (another tab, with the browser extension).
+    reload() {
+      const n = store.get(NOTES_KEY, []);
+      notes = Array.isArray(n) ? n : [];
+      Object.assign(ui, store.get(UI_KEY, {}));
+      place();
+      if (ui.open && !panel.contains(document.activeElement)) render();
+    },
   };
 }

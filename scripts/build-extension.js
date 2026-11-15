@@ -26,7 +26,7 @@ function manifest() {
     name: 'Glass Reader',
     version: pkg.version,
     description: 'Read any page on a calm sheet of glass: articles, GitHub, Google Docs, and whole ChatGPT, Claude and Gemini chats.',
-    permissions: ['activeTab', 'scripting'],
+    permissions: ['activeTab', 'scripting', 'storage'],
     background: { service_worker: 'background.js' },
     action: { default_title: 'Read this page in Glass Reader (Alt+Shift+R)', default_icon: icons },
     icons,

@@ -3,7 +3,8 @@
 // the reader over the page you're on, with that page in it.
 //
 // Asks for as little as it can: "activeTab" (the tab you clicked it on, until you
-// leave that page) and "scripting" (to run the reader there). Nothing is sent anywhere.
+// leave that page), "scripting" (to run the reader there) and "storage" (your reader
+// settings and notes, one copy for every site). Nothing is sent anywhere.
 //
 // scripts/build-extension.js appends the capture code (captureTab() onwards) from
 // extension/browser/background.js, the desktop companion's, so both read pages alike.

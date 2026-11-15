@@ -710,3 +710,21 @@ body[data-theme="clear"] .notes-scope button.on { color: #0b0d14; }
 
 @keyframes note-flash { from { background: var(--sel); } to { background: transparent; } }
 .note-flash { animation: note-flash 1.6s ease-out; border-radius: 4px; }
+
+.notes-where {
+  margin-top: 6px; font-size: 11px; color: var(--fg-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+}
+.notes-where:empty { display: none; }
+.notes-confirm {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 16px;
+  border-top: 1px solid var(--panel-line); background: rgba(255, 90, 70, 0.10); font-size: 13px;
+}
+.notes-confirm[hidden] { display: none; }
+.notes-confirm span { flex: 1; }
+.notes-confirm button {
+  border: 1px solid var(--panel-line); background: var(--panel); color: var(--fg); cursor: pointer;
+  font: 560 12.5px/1 var(--ui); padding: 7px 12px; border-radius: 999px;
+}
+.notes-confirm button.danger { background: #d9443a; border-color: #d9443a; color: #fff; }
+.notes-confirm button.danger:hover { background: #e85348; }

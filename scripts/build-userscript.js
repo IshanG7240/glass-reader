@@ -159,7 +159,8 @@ async function main() {
 // @run-at       document-idle
 // @inject-into  content
 // @noframes
-// @grant        none
+// @grant        GM.getValue
+// @grant        GM.setValue
 // ==/UserScript==
 
 `;
