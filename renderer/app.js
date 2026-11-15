@@ -3,6 +3,7 @@
 // index so switching layouts (or settings) never loses your place.
 
 import { parseDocument, esc } from './parsers.js';
+import { initNotes } from './notes.js';
 
 const $ = (s) => document.querySelector(s);
 const api = window.reader || null;
@@ -826,6 +827,7 @@ const ACT = {
   open: () => pickFile(),
   sample: () => openSample(),
   help: () => { $('#help').hidden = !$('#help').hidden; },
+  notes: () => notes.toggle(),
   hide: () => (api ? api.hide() : toast('Esc hides the overlay in the desktop app')),
 };
 
@@ -914,6 +916,7 @@ async function loadDoc(doc, f) {
       : st.prevFile ? `${fromClaude ? 'Claude’s answer' : 'The answer'} · Backspace returns to what you were reading` : fromClaude ? 'Claude’s answer' : 'The answer');
   }
   else if (st.pos > 0) toast(`Resumed at ${Math.round(st.cum[st.pos] / st.total * 100)}%`);
+  notes.refresh();
 }
 
 function addRecent(r) {
@@ -1032,6 +1035,8 @@ addEventListener('keydown', (e) => {
     return ACT.hide();
   }
   if (k === '?') return ACT.help();
+  if (lower === 'm') return notes.toggle();
+  if (lower === 's' && notes.hasSelection()) { e.preventDefault(); return notes.addSelection(); }
   if (lower === 'n' && st.inbox && api) { st.inbox = false; return api.openInbox(); }
   if (k === 'Backspace' && st.prevFile) { e.preventDefault(); return openFile(st.prevFile); }
   if (lower === 'o') return pickFile();
@@ -1120,6 +1125,30 @@ $('#file').addEventListener('change', async (e) => {
   if (file) openFile({ name: file.name, data: new Uint8Array(await file.arrayBuffer()) });
   e.target.value = '';
 });
+
+// ---------- notes ----------
+
+// A document's notes stay with it: by file path (a Claude session's document keeps its
+// path as the conversation grows), else by title.
+const docIdentity = () => (st.doc ? { id: st.file?.path || st.doc.title || st.file?.name || '', title: st.doc.title || st.file?.name || 'Untitled' } : null);
+
+// Back to a kept passage. Blocks can shift (a Claude conversation grows, a file changes),
+// so check that the block still holds the text, and look for it if not.
+function jumpToClip(block, text) {
+  if (!st.doc) return;
+  const norm = (x) => (x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const probe = norm(text).slice(0, 60);
+  const has = (i) => i != null && i >= 0 && i < st.doc.blocks.length && norm(st.doc.blocks[i].text).includes(probe.slice(0, 40));
+  let b = has(block) ? block : st.doc.blocks.findIndex((_, i) => has(i));
+  if (b < 0) b = block != null && block < st.doc.blocks.length ? block : -1;
+  if (b < 0) return toast('That passage is no longer in this document');
+  setPos(b);
+  mode?.goTo(b);
+  const el = blockEl(b);
+  if (el) { el.classList.remove('note-flash'); void el.offsetWidth; el.classList.add('note-flash'); }
+}
+
+const notes = initNotes({ store, toast, doc: docIdentity, jump: jumpToClip });
 
 // ---------- boot ----------
 

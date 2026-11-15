@@ -47,9 +47,13 @@ Tap or move the mouse to bring up the control bar. With a keyboard:
 | `−` `+` · `[` `]` | Text size · line width |
 | `T` · `F` | Background · typeface |
 | `C` | Read the page again (a chat that has grown) |
+| `S` | Add the selected text to your notes (or click **Add to notes** by the selection) |
+| `M` | Show / hide the notes panel |
 | `Esc` | Close |
 
 Your place in each document is remembered. More in [Layouts](#layouts).
+
+**Notes.** Select a passage and press `S` to keep it in the notes panel; write your own notes in the box at its foot (Enter adds one, Shift+Enter starts a new line), and add a thought under any kept passage. Click a kept passage to go back to it. The panel floats over the page: drag it by its header, resize it from its sides and bottom corners, collapse it to its header (the chevron, or double-click the header). **This doc** shows the open document's notes, **All** every note, and the copy button puts them on the clipboard as Markdown. Notes stay on this device (the reader's local storage).
 
 ## Privacy
 
@@ -289,6 +293,7 @@ preload.js         the small API the page is allowed to use
 renderer/
   parsers.js       every format → one block model (h1–h6, p, li, quote, code, table, img, diagram, math)
   app.js           layouts, auto-play, settings, input
+  notes.js         the notes panel: kept passages and your own notes (drag, resize, collapse)
   styles.css       glass, typography, layouts
 bin/
   glass-reader          launcher (checks the Ubuntu sandbox setup first)
