@@ -9,6 +9,7 @@
 //                                       Claude Code tags with CLAUDE_CODE_SESSION_ID).
 //         --pid 123,456                 …or the session owning one of these processes
 //                                       (the kitty shortcut passes the focused tab's processes).
+//         --session ID                  …or the session with this id.
 //         --transcript F                …or a specific transcript file.
 //         --print                       write the document and print its path; don't open it.
 //   claude-to-reader.js --pick          Show the session picker in the reader.
@@ -18,15 +19,22 @@
 // Env: GR_CLAUDE_MIN_WORDS  answers shorter than this are ignored by the hook (default 250)
 //      GR_CLAUDE_NOTIFY=0   no desktop notification
 //
-// Also loaded by the reader's main process (see main.js) for the session picker.
+// Also loaded by the reader's main process (main.js, or windows/reader.js on Windows) for the session picker.
 
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 
 const HOME = os.homedir();
+const IS_WIN = process.platform === 'win32';
 const LAUNCHER = path.join(__dirname, 'glass-reader');
+// On Windows the reader is windows/reader.js (Node + WebView2), not Electron: see that file.
+const WIN_READER = path.join(__dirname, '..', 'windows', 'reader.js');
+// Where the running reader listens: a Unix socket, or on Windows a named pipe (yours only).
+const IPC_PATH = IS_WIN
+  ? `\\\\.\\pipe\\glass-reader-${(os.userInfo().username || 'user').replace(/[^\w.-]/g, '_')}`
+  : path.join(HOME, '.cache', 'glass-reader', 'reader.sock');
 const OUT_DIR = path.join(HOME, '.cache', 'glass-reader', 'claude');
 const SESSIONS_DIR = path.join(HOME, '.claude', 'sessions');
 const PROJECTS_DIR = path.join(HOME, '.claude', 'projects');
@@ -254,29 +262,61 @@ function transcriptFor(sessionId, cwd) {
 
 const readJSON = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 
+// ---------- processes ----------
+// Linux reads /proc. Windows has no /proc: windows/procs.ps1 lists every process (pid,
+// parent, name, start time) and which one owns the focused window. Its start time is
+// the same FILETIME Claude Code writes as "procStart".
+
+// A Windows process table: { fg, ppid: Map, name: Map, start: Map }.
+function winTable(json) {
+  const t = { fg: 0, title: '', ppid: new Map(), name: new Map(), start: new Map() };
+  try {
+    const o = typeof json === 'string' ? JSON.parse(json) : json;
+    t.fg = o.fg || 0;
+    t.title = String(o.title || '');
+    for (const [pid, ppid, name, start] of o.procs || []) {
+      t.ppid.set(pid, ppid); t.name.set(pid, String(name).replace(/\.exe$/i, '')); if (start && start !== '0') t.start.set(pid, String(start));
+    }
+  } catch { /* empty table */ }
+  return t;
+}
+// One-off snapshot (PowerShell takes a couple of seconds to start; the reader keeps one running).
+function winSnapshot() {
+  try {
+    return winTable(execFileSync('powershell.exe', ['-NoProfile', '-NoLogo', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(__dirname, '..', 'windows', 'procs.ps1')], { encoding: 'utf8', windowsHide: true, timeout: 15000 }));
+  } catch { return winTable('{}'); }
+}
+
 // Field 22 of /proc/<pid>/stat (start time), to tell a live session from a reused pid.
-function procStart(pid) {
+// On Windows: the start time from a process table if there is one, else just "alive".
+function procStart(pid, table) {
+  if (IS_WIN) {
+    if (table) return table.start.get(pid) || (table.ppid.has(pid) ? 'alive' : null);
+    try { process.kill(pid, 0); return 'alive'; } catch (e) { return e.code === 'EPERM' ? 'alive' : null; }
+  }
   try {
     const s = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
     return s.slice(s.lastIndexOf(')') + 2).split(' ')[19];
   } catch { return null; }
 }
 
-function liveSessions() {
+function liveSessions(table) {
   let files = [];
   try { files = fs.readdirSync(SESSIONS_DIR).filter((f) => /^\d+\.json$/.test(f)); } catch { return []; }
   const out = [];
   for (const f of files) {
     const s = readJSON(path.join(SESSIONS_DIR, f));
     if (!s?.sessionId || !s.pid) continue;
-    const started = procStart(s.pid);
-    if (!started || (s.procStart && String(s.procStart) !== started)) continue;
+    const started = procStart(s.pid, table);
+    if (!started || (s.procStart && started !== 'alive' && String(s.procStart) !== started)) continue;
     out.push(s);
   }
   return out;
 }
 
-function parentMap() {
+function parentMap(table) {
+  if (IS_WIN) return (table || winSnapshot()).ppid;
   const ppid = new Map();
   for (const d of fs.readdirSync('/proc')) {
     if (!/^\d+$/.test(d)) continue;
@@ -290,27 +330,62 @@ function parentMap() {
 
 // The session owning one of `pids`: the process itself, something it started
 // (a shell's child), or something that started it (a tool command run by Claude).
-function sessionForPids(pids) {
-  const live = new Map(liveSessions().map((s) => [s.pid, s]));
-  if (!live.size || !pids.length) return null;
-  for (const p of pids) if (live.has(p)) return live.get(p);
-  const ppid = parentMap();
-  const comm = (pid) => { try { return fs.readFileSync(`/proc/${pid}/comm`, 'utf8').trim(); } catch { return ''; } };
+//
+// With { all: true } it returns every session found below `pids` instead (Windows
+// Terminal runs all its tabs under one process, so the focused window can hold several).
+function sessionForPids(pids, { table, all = false } = {}) {
+  if (IS_WIN && !table) table = winSnapshot();
+  const live = new Map(liveSessions(table).map((s) => [s.pid, s]));
+  const one = (s) => (all ? [s] : s);
+  if (!live.size || !pids.length) return all ? [] : null;
+  for (const p of pids) if (live.has(p)) return one(live.get(p));
+  const ppid = parentMap(table);
+  const comm = IS_WIN ? (pid) => (table.name.get(pid) || '').toLowerCase()
+    : (pid) => { try { return fs.readFileSync(`/proc/${pid}/comm`, 'utf8').trim(); } catch { return ''; } };
+  const TERMINAL = /^(kitty|gnome-terminal|alacritty|wezterm|foot|konsole|code|cursor|windowsterminal|openconsole|conhost|explorer)/;
   for (const p of pids) { // ancestors, up to the terminal itself
-    for (let q = ppid.get(p), n = 0; q > 1 && n < 30; q = ppid.get(q), n++) {
-      if (live.has(q)) return live.get(q);
-      if (/^(kitty|gnome-terminal|alacritty|wezterm|foot|konsole|code|cursor)/.test(comm(q))) break;
+    for (let q = ppid.get(p), n = 0; q > (IS_WIN ? 4 : 1) && n < 30; q = ppid.get(q), n++) {
+      if (live.has(q)) return one(live.get(q));
+      if (TERMINAL.test(comm(q))) break;
     }
   }
   const kids = new Map();
-  for (const [c, p] of ppid) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(c); }
-  const queue = [...pids];
+  for (const [c, p] of ppid) { if (c === p) continue; if (!kids.has(p)) kids.set(p, []); kids.get(p).push(c); }
+  const queue = [...pids], found = [], seen = new Set();
   for (let n = 0; queue.length && n < 5000; n++) { // descendants, nearest first
     const p = queue.shift();
-    if (live.has(p)) return live.get(p);
+    if (seen.has(p)) continue;
+    seen.add(p);
+    if (live.has(p)) { if (!all) return live.get(p); found.push(live.get(p)); continue; }
     queue.push(...(kids.get(p) || []));
   }
-  return null;
+  return all ? found : null;
+}
+
+// Windows: the Claude Code session in the focused window. Returns { session } when it
+// can tell, { several: n } when it can't, or {} when there is none.
+//
+// Windows Terminal runs every tab under one process, so a window can hold several
+// sessions. The window's title is the active tab's, and Claude Code titles its tab
+// with the session's name ("✳ Fix flaky login tests"), which picks the right one.
+function focusedSessionWin(table = winSnapshot()) {
+  if (!table.fg) return {};
+  const found = sessionForPids([table.fg], { table, all: true });
+  const byId = new Map(found.map((s) => [s.sessionId, s]));
+  if (byId.size === 1) return { session: found[0] };
+  if (!byId.size) return {};
+  const norm = (x) => x.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const title = norm(table.title);
+  if (title) {
+    const named = [...byId.values()].map((s) => {
+      const t = transcriptFor(s.sessionId, s.cwd);
+      return { s, name: norm((t && displayName(t, s)) || s.name || '') };
+    }).filter((x) => x.name);
+    const exact = named.filter((x) => x.name === title);
+    const loose = exact.length ? exact : named.filter((x) => title.includes(x.name));
+    if (loose.length === 1) return { session: loose[0].s };
+  }
+  return { several: byId.size };
 }
 
 const wordCount = (s) => (s.match(/\S+/g) || []).length;
@@ -447,7 +522,7 @@ function launch(argv) {
 // the request over there takes milliseconds; starting Electron again takes a second.
 function viaSocket(argv) {
   return new Promise((resolve) => {
-    const c = require('node:net').createConnection(path.join(HOME, '.cache', 'glass-reader', 'reader.sock'));
+    const c = require('node:net').createConnection(IPC_PATH);
     const done = (ok) => { clearTimeout(t); c.destroy(); resolve(ok); };
     const t = setTimeout(() => done(false), 1500);
     let buf = '';
@@ -459,11 +534,14 @@ function viaSocket(argv) {
 
 function spawnLaunch(argv) {
   return new Promise((resolve) => {
-    const child = spawn('bash', [LAUNCHER, ...argv], { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = IS_WIN
+      ? spawn(process.execPath, [WIN_READER, ...argv], { detached: true, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true })
+      : spawn('bash', [LAUNCHER, ...argv], { detached: true, stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     child.stderr.on('data', (d) => { err += d; });
     const done = (r) => { clearTimeout(timer); child.stderr.destroy(); child.unref(); resolve(r); };
     const timer = setTimeout(() => done({ ok: true }), 4000);
+    child.on('error', (e) => done({ ok: false, error: e.message }));
     child.on('exit', (code) => {
       if (code === 0) return done({ ok: true });
       const fatal = err.split('\n').find((l) => /FATAL|One-time setup|Error/.test(l)) || err.trim().split('\n').pop() || `exit code ${code}`;
@@ -508,7 +586,7 @@ function notify(title, words) {
 // Errors reach a terminal when there is one, and a notification when run from a shortcut.
 function fail(msg) {
   console.error(msg);
-  if (!process.stderr.isTTY) detached('notify-send', ['-a', 'Glass Reader', '-i', 'dialog-warning', 'Glass Reader', msg]);
+  if (!process.stderr.isTTY && !IS_WIN) detached('notify-send', ['-a', 'Glass Reader', '-i', 'dialog-warning', 'Glass Reader', msg]);
   process.exitCode = 1;
 }
 
@@ -550,8 +628,15 @@ async function main(args) {
     const s = liveSessions().find((x) => x.sessionId === input.session_id);
     const doc = writeSessionDoc({ transcript, sessionId: input.session_id, name: s?.name, cwd: input.cwd, session: s });
     if (!doc) return;
+    const title = firstLine(last.prompt || last.trigger || '', 90) || 'Claude’s answer';
+    if (IS_WIN) {
+      // The reader queues it and announces it itself (a tray notification; click it to read).
+      const note = process.env.GR_CLAUDE_NOTIFY === '0' ? [] : [`--note=${title}\n${wordCount(last.text)}`];
+      await launch(['--queue', doc.file, ...note]);
+      return;
+    }
     detached('bash', [LAUNCHER, '--queue', doc.file]);
-    notify(firstLine(last.prompt || last.trigger || '', 90) || 'Claude’s answer', wordCount(last.text));
+    notify(title, wordCount(last.text));
     return;
   }
 
@@ -564,7 +649,11 @@ async function main(args) {
 
   // Global shortcut: if a kitty window has focus (kitty_focus_watcher.py records it),
   // open the session in that tab; anywhere else, show the picker.
-  if (has('--focused')) {
+  if (has('--focused') && IS_WIN) {
+    const f = focusedSessionWin();
+    if (!f.session) return pick(f.several ? `${f.several} Claude Code sessions in that window.` : '');
+    args.push('--session', f.session.sessionId);
+  } else if (has('--focused')) {
     const f = kittyFocus();
     if (!f) return pick();
     args.push('--pid', String(f.pid));
@@ -578,8 +667,12 @@ async function main(args) {
     let s = null;
     const pids = (argVal('--pid') || '').split(',').map(Number).filter((n) => n > 0);
     if (pids.length) s = sessionForPids(pids);
+    const id = argVal('--session');
+    if (!s && id) s = liveSessions().find((x) => x.sessionId === id) || { sessionId: id };
     const envId = process.env.CLAUDE_CODE_SESSION_ID;
     if (!s && envId) s = liveSessions().find((x) => x.sessionId === envId) || { sessionId: envId };
+    // No session id in the environment: the Claude Code process this command runs under, if any.
+    if (!s && has('--last')) s = sessionForPids([process.pid]);
     if (s) {
       const transcript = transcriptFor(s.sessionId, s.cwd);
       if (transcript) target = { transcript, sessionId: s.sessionId, name: s.name, cwd: s.cwd, session: s };
@@ -595,7 +688,10 @@ async function main(args) {
   console.log(`Opened in Glass Reader: "${firstLine(doc.last.prompt || doc.last.trigger || '', 60)}" (${wordCount(doc.last.text).toLocaleString()} words).`);
 }
 
-module.exports = { liveSessions, sessionSummaries, docForSession, sessionForPids, turns, buildMarkdown, main, launch, fail };
+module.exports = {
+  liveSessions, sessionSummaries, docForSession, sessionForPids, focusedSessionWin, winTable,
+  turns, buildMarkdown, main, launch, fail, IPC_PATH,
+};
 
 if (require.main === module) {
   const args = process.argv.slice(2);

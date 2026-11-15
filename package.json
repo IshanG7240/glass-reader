@@ -12,7 +12,8 @@
     "serve:ios": "node scripts/serve-userscript.js",
     "build:extension": "node scripts/build-extension.js",
     "test:extension": "node extension/standalone/test/run.js",
-    "build:android": "node scripts/build-android.js"
+    "build:android": "node scripts/build-android.js",
+    "start:windows": "node windows/reader.js"
   },
   "author": "",
   "license": "ISC",

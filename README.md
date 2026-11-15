@@ -33,6 +33,7 @@ Get it from the [latest release](https://github.com/IshanG7240/glass-reader/rele
 | **iPad, iPhone** (Safari) | [glass-reader.user.js](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.user.js) | A READ tab on ChatGPT, Claude and Gemini conversations. [Install](#ipad-and-iphone-chatgpt-claude-and-gemini-conversations) |
 | **Android** | [glass-reader.apk](https://github.com/IshanG7240/glass-reader/releases/latest/download/glass-reader.apk) | Reads conversations straight from the ChatGPT, Claude and Gemini apps; opens anything you share. [Install](#android-chatgpt-claude-and-gemini-apps) |
 | **Linux desktop** | from source | The full app: files, a global hotkey that reads whatever window you're in, Claude Code sessions. [Set up](#linux-desktop-app) |
+| **Windows** (PowerShell, Windows Terminal) | from source | Claude Code sessions: a hotkey reads the session in the terminal tab you're looking at. Files too. [Set up](#windows-claude-code-in-powershell) |
 
 ## Using it
 
@@ -189,6 +190,34 @@ Setup: `scripts/install-claude-hook.sh` adds the automatic Stop hook to `~/.clau
 
 Tuning: `GR_CLAUDE_MIN_WORDS=400` changes the threshold; `GR_CLAUDE_NOTIFY=0` turns off notifications.
 
+## Windows: Claude Code in PowerShell
+
+The reader on Windows, for Claude Code running in PowerShell / Windows Terminal. It is built from parts Windows already trusts (Node, Windows PowerShell and Microsoft's WebView2, which Windows 11 has built in) instead of Electron, so it works with **Smart App Control** on, which blocks Electron's unsigned `electron.exe`.
+
+**Set up** (PowerShell 7, Node.js 18+):
+
+```powershell
+git clone https://github.com/IshanG7240/glass-reader
+cd glass-reader
+scripts\install-windows.ps1                 # Ctrl+Alt+C / Ctrl+Alt+R
+scripts\install-windows.ps1 -ReadKey 'Control+Shift+F10' -ToggleKey 'Control+Shift+F9'   # or choose your own
+scripts\install-windows.ps1 -Uninstall
+```
+
+It runs `npm install`, downloads Microsoft's WebView2 SDK (three signed DLLs, into `%LOCALAPPDATA%\glass-reader`), puts `bin\` on your PATH, starts the reader hidden at sign-in, adds it to the Start menu, and starts it now. A page icon appears in the tray (click it to open the reader; right-click to open a file or quit).
+
+| How | What happens |
+| --- | --- |
+| **Ctrl+Alt+C** | Opens the Claude Code session in the window you're looking at: the whole conversation, scrolled to the latest answer. In Windows Terminal it reads the **active tab** (every tab runs under one process, but the window's title is the active tab's, and Claude Code names its tab after the session). In VS Code it finds the session running in its terminal (with several, the picker opens). Where it can't tell, the session picker opens. |
+| **Ctrl+Alt+R** | Shows / hides the reader. **Esc** hides it too. |
+| **`claude-read`** | From PowerShell. Inside Claude Code, `! claude-read` opens that session (Claude sees the command and may reply to it, so prefer the shortcut). `glass-reader --toggle`, `glass-reader file.pdf`, `glass-reader --quit` drive the reader from a terminal. |
+
+Not automatic by default: nothing pops up when Claude finishes. To have long answers queued with a notification (as on Linux), install with `-Hook`.
+
+Under the hood, `windows/reader.js` does what `main.js` does in the Electron app, and `windows/host.cs` is the window: a borderless full-screen WebView2, the shortcuts (`RegisterHotKey`) and the tray icon, compiled at start by Windows PowerShell. The page is served from `127.0.0.1` on a random port behind a random secret path, and commands arrive on a named pipe only your user can open. Nothing leaves your machine. `GR_DEBUG=1` logs to `~\.cache\glass-reader\debug.log` and turns on DevTools (F12).
+
+Not on Windows yet: Ctrl+Alt+C for browsers and editors (it reads Claude Code sessions only), the see-through overlay (the window is opaque; the glass themes still draw your wallpaper behind the page), and relative images in a file dragged onto the reader (open it with the folder button instead).
+
 ## Formats
 
 | Format | Text | Images and diagrams |
@@ -268,6 +297,12 @@ bin/
   browser-host.js       browser helper (native messaging): focus + current tab for read-focused.js
   kitty_focus_watcher.py  kitty watcher: records which kitty window has focus
   claude-read           command-line entry point
+  claude-read.cmd, glass-reader.cmd   the same on Windows
+windows/           the Windows app (no Electron; see "Windows: Claude Code in PowerShell")
+  reader.js       background process: what main.js is in Electron (state, local server, named pipe)
+  host.cs         the window: full-screen WebView2, global shortcuts, tray icon (run by host.ps1)
+  bridge.js       window.reader for the page, over WebView2's message channel (stands in for preload.js)
+  procs.cs        the focused window and the process table, to find its Claude Code session
 extension/
   browser/        Brave / Chrome extension (load unpacked); Readability.js is Mozilla's, Apache-2.0
   standalone/     the shareable extension: background.js (toolbar button), icons, PRIVACY.md, test/
@@ -298,6 +333,7 @@ scripts/
   install-extensions.sh     VS Code / Cursor extension and browser helper
   install-claude-hook.sh    automatic Stop hook
   install-apparmor.sh       one-time Ubuntu sandbox profile (sudo)
+  install-windows.ps1       Windows: WebView2 SDK, PATH, sign-in start, shortcuts (-Hook, -Uninstall)
   make-test-pdf.js          builds samples/test-figures.pdf for testing the PDF cleaner
 ```
 
