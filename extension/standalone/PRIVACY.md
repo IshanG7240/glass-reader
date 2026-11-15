@@ -7,5 +7,6 @@ Glass Reader shows the page you are on in a reader view, inside that same page.
   else; there are no servers, accounts, analytics or ads.
 - To read a whole ChatGPT, Claude or Gemini conversation, or a Google Doc, it asks that
   site for it with your own sign-in, the way the site's own page does.
-- Your reader settings (theme, layout, text size) are kept in that site's local storage
-  in your browser.
+- Your reader settings (theme, layout, text size) and notes are kept in the extension's
+  own storage in your browser (one copy for every site), and a copy in the local storage
+  of the site you read them on.

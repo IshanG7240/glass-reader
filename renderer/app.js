@@ -27,9 +27,17 @@ const THEME_ROOM = {
 const FULL = 160; // measure value meaning "use the full screen width"
 const DEFAULTS = { mode: 'column', font: 'sans', size: 20, measure: 76, leadAdj: 0, theme: 'studio', align: 'left', para: 'space', wpm: 240, hud: false };
 
+// Settings and notes are yours everywhere, not per page: where the reader runs inside web
+// pages (the browser extension), each site has its own localStorage, so these keys are
+// also handed to api.persist, which keeps one copy for every site and tab. The desktop
+// apps have one origin, so localStorage alone already is that copy.
+const SHARED = /^gr:(settings|notes|notes-ui)$/;
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  set(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ }
+    if (SHARED.test(k)) try { api?.persist?.(k, v); } catch { /* not available */ }
+  },
 };
 const S = { ...DEFAULTS, ...store.get('gr:settings', {}) };
 const saveSettings = () => store.set('gr:settings', S);
@@ -1148,7 +1156,11 @@ function jumpToClip(block, text) {
   if (el) { el.classList.remove('note-flash'); void el.offsetWidth; el.classList.add('note-flash'); }
 }
 
-const notes = initNotes({ store, toast, doc: docIdentity, jump: jumpToClip });
+const notes = initNotes({
+  store, toast, doc: docIdentity, jump: jumpToClip,
+  // Shown at the panel's foot, so you know where your notes are.
+  where: api?.dataDir ? `${api.dataDir}${api.dataDir.includes('\\') ? '\\' : '/'}notes.json` : api?.storageName || '',
+});
 
 // ---------- boot ----------
 
@@ -1169,6 +1181,18 @@ if (api) {
   api.onFetching?.(() => setFetching(true));
   api.onFetchingOff?.(() => setFetching(false));
   api.onToast?.((m) => toast(m));
+  // Changed in another tab or site (the extension): take it over here too.
+  api.onStored?.((k, v) => {
+    if (!SHARED.test(k) || v == null) return;
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ }
+    if (k === 'gr:settings') {
+      const was = S.mode;
+      Object.assign(S, DEFAULTS, v);
+      applyVars();
+      if (st.doc && S.mode !== was) setMode(S.mode);
+      else mode?.relayout();
+    } else notes.reload();
+  });
   api.onInbox(() => { st.inbox = true; toast('Claude finished a new answer · press N to read it'); });
   api.wallpaper().then((url) => {
     if (!url) return;

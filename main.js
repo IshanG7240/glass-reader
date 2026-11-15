@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { fileURLToPath } = require('node:url');
 const claude = require('./bin/claude-to-reader.js');
+const shared = require('./bin/shared-store.js');
 
 const ROOT = __dirname;
 const MAX_BYTES = 300 * 1024 * 1024;
@@ -281,6 +282,11 @@ ipcMain.handle('claude-open', (_e, id) => {
   } catch (err) { return String(err.message || err); }
 });
 ipcMain.on('quit', quit);
+// Settings and notes as files (bin/shared-store.js); preload.js seeds the page from them.
+ipcMain.on('shared-load', (e) => { e.returnValue = { dir: shared.DIR, values: shared.loadAll() }; });
+ipcMain.on('persist', (_e, k, v) => {
+  try { shared.save(String(k), v); } catch (err) { console.error('saving', k, 'failed:', err.message); win?.webContents.send('error', `Couldn't save to ${shared.DIR}: ${err.message}`); }
+});
 ipcMain.on('log', (_e, ...a) => console.log('[renderer]', ...a));
 ipcMain.on('ready', () => {
   rendererReady = true;

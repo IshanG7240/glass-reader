@@ -3,7 +3,7 @@
 // before the page's own scripts run.
 (() => {
   const wv = window.chrome && window.chrome.webview;
-  if (!wv || window.reader) return;
+  if (!wv || window.reader || window.top !== window) return;
   let seq = 0;
   const pending = new Map();
   const handlers = {};
@@ -47,9 +47,28 @@
   });
 
   const base = location.href.replace(/\/renderer\/.*$/, '');
+
+  // Settings and notes live in files (bin/shared-store.js). Put them in localStorage
+  // before the page's own scripts read it; anything only localStorage has (from before
+  // there were files) goes to the files.
+  let dataDir = '';
+  try {
+    const x = new XMLHttpRequest();
+    x.open('GET', `${base}/__shared`, false); // synchronous on purpose: the page reads settings as it starts
+    x.send();
+    const { dir, values } = JSON.parse(x.responseText);
+    dataDir = dir || '';
+    for (const k of ['gr:settings', 'gr:notes', 'gr:notes-ui']) {
+      if (values && k in values) localStorage.setItem(k, JSON.stringify(values[k]));
+      else if (localStorage.getItem(k) != null) send('persist', [k, JSON.parse(localStorage.getItem(k))]);
+    }
+  } catch (err) { console.warn('settings files unavailable:', err); }
+
   window.reader = {
     isElectron: false,
     isWindowsHost: true,
+    dataDir,
+    persist: (k, v) => send('persist', [k, v]),
     imageBase: `${base}/__img?p=`,
     openDialog: () => invoke('open-dialog'),
     readPath: (p) => invoke('read-path', p),

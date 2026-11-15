@@ -53,7 +53,15 @@ Tap or move the mouse to bring up the control bar. With a keyboard:
 
 Your place in each document is remembered. More in [Layouts](#layouts).
 
-**Notes.** Select a passage and press `S` to keep it in the notes panel; write your own notes in the box at its foot (Enter adds one, Shift+Enter starts a new line), and add a thought under any kept passage. Click a kept passage to go back to it. The panel floats over the page: drag it by its header, resize it from its sides and bottom corners, collapse it to its header (the chevron, or double-click the header). **This doc** shows the open document's notes, **All** every note, and the copy button puts them on the clipboard as Markdown. Notes stay on this device (the reader's local storage).
+**Notes.** Select a passage and press `S` to keep it in the notes panel; write your own notes in the box at its foot (Enter adds one, Shift+Enter starts a new line), and add a thought under any kept passage. Click a kept passage to go back to it. The panel floats over the page: drag it by its header, resize it from its sides and bottom corners, collapse it to its header (the chevron, or double-click the header). **This doc** shows the open document's notes, **All** every note; the copy button puts them on the clipboard as Markdown, and the bin button deletes all of them (it asks first). The panel's foot says where they are kept.
+
+**Your settings and notes follow you.** A theme, layout, text size or note set anywhere is the same everywhere in that version of the reader, and never resets:
+
+| Version | Kept in |
+| --- | --- |
+| **Windows, Linux** desktop apps | Files in `Documents/Glass Reader/` (your real Documents folder, wherever it lives, OneDrive included): `settings.json`, `notes.json`, `notes.md` (the notes as Markdown, to read anywhere) and `backups/` (notes as they were before any deletion, and at most hourly otherwise; the newest 40). `GR_DATA_DIR` chooses another folder. They survive reinstalling and clearing the app's data. |
+| **Browser extension** | The extension's storage: one copy for every site and tab, and a change shows in tabs that are already open. Removing the extension removes it. |
+| **iPad, iPhone** (userscript) | The userscript's storage, shared by ChatGPT, Claude and Gemini. |
 
 ## Privacy
 
@@ -303,6 +311,7 @@ bin/
   kitty_focus_watcher.py  kitty watcher: records which kitty window has focus
   claude-read           command-line entry point
   claude-read.cmd, glass-reader.cmd   the same on Windows
+  shared-store.js       settings and notes as files in Documents/Glass Reader (desktop apps), with backups
 windows/           the Windows app (no Electron; see "Windows: Claude Code in PowerShell")
   reader.js       background process: what main.js is in Electron (state, local server, named pipe)
   host.cs         the window: full-screen WebView2, global shortcuts, tray icon (run by host.ps1)

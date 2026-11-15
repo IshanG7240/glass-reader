@@ -22,6 +22,7 @@ const net = require('node:net');
 const crypto = require('node:crypto');
 const { spawn, execFileSync } = require('node:child_process');
 const claude = require('../bin/claude-to-reader.js');
+const shared = require('../bin/shared-store.js');
 
 const ROOT = path.join(__dirname, '..');
 const MAX_BYTES = 300 * 1024 * 1024;
@@ -231,6 +232,10 @@ function onPage(m) {
     case 'quit': return quit();
     case 'log': return console.log('[renderer]', ...(m.args?.[0] || []));
     case 'open-inbox': if (inbox) { const p = inbox; inbox = null; sendOpen(p); } return;
+    case 'persist': // settings and notes, kept as files (bin/shared-store.js)
+      try { if (Array.isArray(m.args) && typeof m.args[0] === 'string') shared.save(m.args[0], m.args[1]); }
+      catch (err) { console.error('saving', m.args?.[0], 'failed:', err.message); send('error', `Couldn't save to ${shared.DIR}: ${err.message}`); }
+      return;
     case 'ready':
       rendererReady = true;
       if (queuedPath) { const p = queuedPath; queuedPath = null; sendOpen(p); }
@@ -335,6 +340,10 @@ function onRequest(req, res) {
   const prefix = `/${token}/`;
   if (req.method !== 'GET' || !u.pathname.startsWith(prefix)) { res.writeHead(404); return res.end(); }
   const rest = decodeURIComponent(u.pathname.slice(prefix.length));
+  if (rest === '__shared') { // read by bridge.js before the page starts
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ dir: shared.DIR, values: shared.loadAll() }));
+  }
   if (rest === '__wallpaper') return wallpaper ? serveFile(res, wallpaper, path.extname(wallpaper) ? undefined : 'image/jpeg') : res.writeHead(404).end();
   if (rest.startsWith('__file/')) { const p = files.get(rest.slice(7)); return p ? serveFile(res, p, 'application/octet-stream') : res.writeHead(404).end(); }
   if (rest === '__img') {

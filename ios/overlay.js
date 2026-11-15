@@ -43,6 +43,70 @@
   const overlayOpen = () => !!frame && frame.style.display !== 'none';
   const emit = (name, ...a) => handlers[name]?.(...a);
 
+  // ---------- settings shared by every site ----------
+  // The reader keeps settings and notes in localStorage, which is this site's own. So
+  // they are also kept in one place for every site and tab (renderer/app.js hands these
+  // keys to persist()): the extension's chrome.storage, or the userscript manager's own
+  // storage (GM.getValue / GM.setValue: Userscripts on iPad, Tampermonkey, Violentmonkey).
+  const SHARED_KEYS = ['gr:settings', 'gr:notes', 'gr:notes-ui'];
+  const GMs = typeof GM !== 'undefined' && GM?.getValue && GM?.setValue ? GM : null;
+  const sharedStore = EXTENSION && globalThis.chrome?.storage?.local
+    ? {
+      name: 'this browser (the extension’s storage, shared by every site)',
+      get: (keys) => chrome.storage.local.get(keys),
+      set: (o) => chrome.storage.local.set(o),
+    }
+    : GMs
+      ? {
+        name: 'the userscript’s storage (shared by ChatGPT, Claude and Gemini)',
+        async get(keys) {
+          const out = {};
+          for (const k of keys) {
+            const v = await GMs.getValue(k);
+            if (v != null) try { out[k] = typeof v === 'string' ? JSON.parse(v) : v; } catch { /* damaged */ }
+          }
+          return out;
+        },
+        async set(o) { for (const [k, v] of Object.entries(o)) await GMs.setValue(k, JSON.stringify(v)); },
+      }
+      : null;
+  let shared = {};
+  async function loadShared() {
+    if (!sharedStore) return;
+    try { shared = await sharedStore.get(SHARED_KEYS); } catch { shared = {}; }
+    // From before there was a shared copy: this site's own settings and notes join it.
+    try {
+      const W0 = W || window;
+      for (const k of SHARED_KEYS) {
+        if (shared[k] != null) continue;
+        const local = W0.localStorage.getItem(k);
+        if (local != null) { shared[k] = JSON.parse(local); sharedStore.set({ [k]: shared[k] }).catch(() => {}); }
+      }
+    } catch { /* no storage */ }
+  }
+  // Into the frame's localStorage, where the reader looks when it starts.
+  function seedShared() {
+    for (const k of SHARED_KEYS) {
+      if (shared[k] == null) continue;
+      try { W.localStorage.setItem(k, JSON.stringify(shared[k])); } catch { /* no storage */ }
+    }
+  }
+  if (sharedStore && EXTENSION) {
+    try {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        for (const k of SHARED_KEYS) {
+          if (!(k in changes)) continue;
+          const v = changes[k].newValue;
+          // Our own write coming back: nothing to do.
+          if (JSON.stringify(v) === JSON.stringify(shared[k])) continue;
+          shared[k] = v;
+          emit('stored', k, v);
+        }
+      });
+    } catch { /* orphaned after an update */ }
+  }
+
   // ---------- which page is a conversation ----------
 
   const isConversation = () => {
@@ -179,8 +243,9 @@
     D.body.dataset.theme = 'glass';
     D.body.classList.add('in-page');
 
-    // First run on this site: start on Glass, which here is the conversation itself,
-    // blurred, behind the text.
+    // Your settings from every other site (the extension), then, the first time ever:
+    // start on Glass, which here is the conversation itself, blurred, behind the text.
+    seedShared();
     try { if (!W.localStorage.getItem('gr:settings')) W.localStorage.setItem('gr:settings', JSON.stringify({ theme: 'glass' })); } catch { /* no storage */ }
 
     const on = (name) => (cb) => { handlers[name] = cb; };
@@ -197,6 +262,13 @@
       onOpen: on('open'), onError: on('error'), onShown: on('shown'), onRequestOpen: on('requestOpen'),
       onPicker: on('picker'), onFetching: on('fetching'), onFetchingOff: on('fetchingOff'),
       onToast: on('toast'), onInbox: on('inbox'),
+      onStored: on('stored'),
+      storageName: sharedStore?.name || 'this site’s storage in your browser',
+      persist(k, v) {
+        if (!sharedStore || !SHARED_KEYS.includes(k)) return;
+        shared[k] = v;
+        try { sharedStore.set({ [k]: v }).catch(() => {}); } catch { /* orphaned after an update */ }
+      },
     };
 
     // Before the reader's own keys: C reads the conversation again (it may have grown);
@@ -293,8 +365,11 @@
     if (!EXTENSION && !isConversation()) return say('Glass Reader is ready. Open a conversation (or start one), then tap READ.\n\nTap to dismiss.', false, 6000);
     tab.classList.add('busy');
     say('Opening…');
+    await loadShared();
     try {
       if (!frame) build();
+      // Already built on this page: settings may have changed on another site since.
+      else for (const k of SHARED_KEYS) if (shared[k] != null) emit('stored', k, shared[k]);
     } catch (e) { frame?.remove(); frame = null; handlers = {}; return fail('setting up the reader', e); }
     try { show(); } catch (e) { return fail('showing the reader', e); }
     tab.classList.remove('busy');
