@@ -771,17 +771,28 @@ function toast(msg, err = false) {
   toastT = setTimeout(() => t.classList.remove('on'), err ? 4200 : msg.length > 40 ? 3800 : 1700);
 }
 
-let hudPeek = false, idleT = 0;
+// The control bar comes up when the pointer goes to the bottom of the screen (or on a
+// tap, a key, or when the reader opens), not for every movement over the text. The
+// pointer itself hides after a moment of stillness, and shows again when moved.
+const HUD_ZONE = 120; // px from the bottom edge that bring the bar up
+let hudPeek = false, idleT = 0, hudT = 0;
 function applyHud() { body.classList.toggle('hud-off', !S.hud && !hudPeek); }
-function poke() {
+function wake() {
   body.classList.remove('idle');
-  if (!hudPeek) { hudPeek = true; applyHud(); }
   clearTimeout(idleT);
   idleT = setTimeout(() => {
-    if ($('#hud').matches(':hover')) return poke();
+    if (hudPeek) return wake(); // not while the bar is up
+    if (st.doc) body.classList.add('idle');
+  }, 2200);
+}
+function poke() {
+  wake();
+  if (!hudPeek) { hudPeek = true; applyHud(); }
+  clearTimeout(hudT);
+  hudT = setTimeout(function settle() {
+    if ($('#hud').matches(':hover')) { hudT = setTimeout(settle, 2200); return; }
     hudPeek = false;
     applyHud();
-    if (st.doc) body.classList.add('idle');
   }, 2200);
 }
 
@@ -1095,7 +1106,11 @@ document.addEventListener('click', (e) => {
   else ACT[b.dataset.act]?.();
 });
 
-addEventListener('mousemove', poke, { passive: true });
+addEventListener('mousemove', (e) => {
+  // Synthetic moves are taps (ios/overlay.js turns a touch into one): those show the bar.
+  if (!e.isTrusted || e.clientY >= innerHeight - HUD_ZONE) poke();
+  else wake();
+}, { passive: true });
 
 // Image diagnostics (visible with GR_DEBUG=1).
 document.addEventListener('error', (e) => {
