@@ -867,11 +867,14 @@ async function openFile(f) {
 // served by the main process. Only possible when we know where the file lives.
 function imageResolver(path) {
   if (!api || !path) return null;
-  const base = 'file://' + path.split('/').map(encodeURIComponent).join('/');
+  // Windows paths (D:\docs\a.md) become file:///D:/docs/a.md, and back again below.
+  const parts = path.replace(/\\/g, '/').split('/').map(encodeURIComponent);
+  const base = 'file://' + (/^[A-Za-z]%3A$/.test(parts[0]) ? '/' + decodeURIComponent(parts[0]) + '/' + parts.slice(1).join('/') : parts.join('/'));
   return (src) => {
     try {
       const u = new URL(src, base);
-      return u.protocol === 'file:' ? 'app://local/__img?p=' + encodeURIComponent(decodeURIComponent(u.pathname)) : null;
+      const p = decodeURIComponent(u.pathname).replace(/^\/([A-Za-z]:\/)/, '$1');
+      return u.protocol === 'file:' ? (api.imageBase || 'app://local/__img?p=') + encodeURIComponent(p) : null;
     } catch { return null; }
   };
 }
@@ -890,10 +893,10 @@ async function loadDoc(doc, f) {
   st.total = acc || 1;
   st.heads = doc.blocks.flatMap((b, i) => (/^h[1-3]$/.test(b.type) ? [i] : []));
   st.pos = clamp(store.get('gr:pos:' + st.key, 0), 0, doc.blocks.length - 1);
-  const fromClaude = /\/glass-reader\/claude\//.test(f.path || '');
+  const fromClaude = /[\\/]glass-reader[\\/]claude[\\/]/.test(f.path || '');
   // A Claude conversation opens at its latest prompt; earlier turns are above it.
   // So does a chat captured from the browser (ChatGPT, Claude, Gemini).
-  const isChat = fromClaude || (/\/glass-reader\/captures\//.test(f.path || '') && doc.blocks.some((b) => b.anchor?.startsWith('gr-turn')));
+  const isChat = fromClaude || (/[\\/]glass-reader[\\/]captures[\\/]/.test(f.path || '') && doc.blocks.some((b) => b.anchor?.startsWith('gr-turn')));
   const lastTurn = isChat ? doc.blocks.findLastIndex((b) => b.anchor?.startsWith('gr-turn')) : -1;
   if (lastTurn >= 0) st.pos = lastTurn;
   body.classList.remove('no-doc');
@@ -901,7 +904,7 @@ async function loadDoc(doc, f) {
   $('#help').hidden = true;
   $('#v-title').textContent = doc.title;
   document.title = `${doc.title} — Glass Reader`;
-  if (f.path && !fromClaude && !/\/glass-reader\/captures\//.test(f.path)) addRecent({ title: doc.title, path: f.path, key: st.key });
+  if (f.path && !fromClaude && !/[\\/]glass-reader[\\/]captures[\\/]/.test(f.path)) addRecent({ title: doc.title, path: f.path, key: st.key });
   await document.fonts.ready;
   setMode(S.mode);
   console.info(`opened "${doc.title}": ${doc.blocks.length} blocks, ${st.chunks.length} chunks, mode ${S.mode}, at block ${st.pos}, ${doc.blocks.filter((b) => b.type === 'table').length} tables, ${doc.blocks.filter((b) => b.type === 'img').length} images`);
