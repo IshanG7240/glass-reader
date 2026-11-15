@@ -387,8 +387,19 @@ async function main() {
     pipe.listen(claude.IPC_PATH, resolve);
   });
 
+  // The page keeps your settings, reading positions and notes in localStorage, which
+  // belongs to the page's origin, port included. So the port is the same every time: one
+  // picked from your user name, or the next free one after it.
   const server = http.createServer(onRequest);
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const home = 41000 + (crypto.createHash('sha1').update(os.userInfo().username || 'user').digest().readUInt16BE(0) % 4000);
+  for (let port = home, tries = 0; ; port++, tries++) {
+    const ok = await new Promise((resolve) => {
+      server.once('error', () => resolve(false));
+      server.listen(tries < 25 ? port : 0, '127.0.0.1', () => resolve(true));
+    });
+    if (ok) break;
+    if (tries >= 25) throw new Error("Couldn't open a local port for the reader");
+  }
   base = `http://127.0.0.1:${server.address().port}/${token}`;
   wallpaper = findWallpaper();
   debug('serving', base.replace(token, '…'), 'wallpaper', wallpaper);
