@@ -3,7 +3,7 @@
 // connected over USB (`--install`). Uses ~/Android/jdk and ~/Android/Sdk unless
 // JAVA_HOME / ANDROID_HOME say otherwise.
 'use strict';
-const { execFileSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,13 +13,23 @@ const home = (p) => path.join(os.homedir(), p);
 const env = { ...process.env };
 if (!env.JAVA_HOME && fs.existsSync(home('Android/jdk'))) env.JAVA_HOME = home('Android/jdk');
 if (!env.ANDROID_HOME && fs.existsSync(home('Android/Sdk'))) env.ANDROID_HOME = home('Android/Sdk');
+// Windows: Android Studio's own Java and SDK, where it puts them.
+if (process.platform === 'win32') {
+  const studioJbr = path.join(process.env.ProgramFiles || 'C:/Program Files', 'Android/Android Studio/jbr');
+  const winSdk = path.join(process.env.LOCALAPPDATA || '', 'Android/Sdk');
+  if (!env.JAVA_HOME && fs.existsSync(studioJbr)) env.JAVA_HOME = studioJbr;
+  if (!env.ANDROID_HOME && fs.existsSync(winSdk)) env.ANDROID_HOME = winSdk;
+}
 if (!fs.existsSync(path.join(root, 'node_modules/katex'))) {
   console.error('Run npm install first: the app bundles fonts and libraries from node_modules.');
   process.exit(1);
 }
 
 const gradlew = path.join(root, 'android', process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
-execFileSync(gradlew, ['-q', 'assembleDebug'], { cwd: path.join(root, 'android'), env, stdio: 'inherit' });
+// Node runs a .bat only through the shell (and refuses to otherwise, with EINVAL).
+const gradleOpts = { cwd: path.join(root, 'android'), env, stdio: 'inherit' };
+if (process.platform === 'win32') execSync(`"${gradlew}" -q assembleDebug`, gradleOpts);
+else execFileSync(gradlew, ['-q', 'assembleDebug'], gradleOpts);
 const apk = path.join(root, 'android/app/build/outputs/apk/debug/app-debug.apk');
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 const out = path.join(root, 'dist/glass-reader.apk');
