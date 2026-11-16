@@ -82,7 +82,7 @@ A version that needs nothing else installed: no desktop app, no shortcuts to set
 On iOS no app can read another app's screen, so Glass Reader works inside **Safari**, as a userscript run by the free **Userscripts** app (App Store). It doesn't need a Mac, Xcode or a developer account. On a ChatGPT, Claude or Gemini conversation, a small glass tab sits on the right edge (a blue-violet READ tab). Tap it (or press **Ctrl+Option+C** on a keyboard) and the **whole conversation** opens over the page at the latest answer, with earlier prompts and answers above it. It uses the same reader, layouts, maths, tables and code as the desktop app.
 
 - **Glass** shows the conversation behind the text, blurred. **T** or the theme button cycles through the others.
-- **Tap** to bring up the controls; **✕** (first on the bar) closes the reader. In Book, Focus and Cinema, swipe to turn pages.
+- **Tap** to bring up the controls; **✕** (first on the bar) closes the reader. In Book, Focus and Cinema, swipe to turn pages. **Pinch** to make the text bigger or smaller (the page itself no longer zooms). The notes panel moves by its header and resizes from its edges or the corner mark.
 - **C** reads the conversation again (after new answers). With text selected, only the selection opens.
 - The capture is the browser extension's own code (`extract()` in `extension/browser/background.js`): ChatGPT and Claude are read from the API the page itself uses, with your sign-in; Gemini is read from the page, scrolling up first so older turns load. Nothing is sent anywhere; the reader runs in a frame of the same page.
 - Using the ChatGPT, Claude or Gemini **app**? Conversations sync, so open the same chat in Safari (it's in the sidebar history) and tap the tab there.

@@ -138,6 +138,9 @@ export function initNotes({ store, toast, doc, jump, where = '' }) {
   // The tucked-away tab opens with one click anywhere on it.
   head.addEventListener('click', (e) => { if (ui.collapsed && !e.target.closest('button')) setCollapsed(false); });
 
+  // Belt and braces for touch: while dragging or resizing, the finger never scrolls.
+  panel.addEventListener('touchmove', (e) => { if (panel.classList.contains('moving')) e.preventDefault(); }, { passive: false });
+
   // Resize from the edges and bottom corners.
   for (const g of panel.querySelectorAll('.notes-grip')) {
     g.addEventListener('pointerdown', (e) => {

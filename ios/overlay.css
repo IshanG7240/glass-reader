@@ -51,9 +51,9 @@ body.in-page .mode-column .scroller {
 
 /* In the see-through themes the background is transparent, so the selected pill (inked
    with --body-bg everywhere else) gets explicit ink. Solid themes keep their own. */
-body.in-page[data-theme="glass"] :is(.seg button.on, .actions button.primary),
-body.in-page[data-theme="clear"] :is(.seg button.on, .actions button.primary) { color: #0b0d14 !important; }
-body.in-page[data-theme="frost"] :is(.seg button.on, .actions button.primary) { color: #fff !important; }
+body.in-page[data-theme="glass"] :is(.seg button.on, .actions button.primary, .notes-scope button.on),
+body.in-page[data-theme="clear"] :is(.seg button.on, .actions button.primary, .notes-scope button.on) { color: #0b0d14 !important; }
+body.in-page[data-theme="frost"] :is(.seg button.on, .actions button.primary, .notes-scope button.on) { color: #fff !important; }
 
 /* Control bar: close first (there's no Esc key without a keyboard), never squeezed. */
 body.in-page #hud > * { flex-shrink: 0; }

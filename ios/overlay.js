@@ -299,18 +299,39 @@
   // Touch: a tap shows the controls; in Book, Focus and Cinema a swipe turns the page.
   function touch(D) {
     const key = (k) => W.dispatchEvent(new W.KeyboardEvent('keydown', { key: k, bubbles: true }));
-    let x0 = 0, y0 = 0, t0 = 0;
+    let x0 = 0, y0 = 0, t0 = 0, pinch0 = 0, pinched = false;
+    const span = (ts) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
     D.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'mouse') W.dispatchEvent(new W.MouseEvent('mousemove'));
     }, { passive: true });
     D.addEventListener('touchstart', (e) => {
       const t = e.touches[0];
-      [x0, y0, t0] = [t.clientX, t.clientY, Date.now()];
+      if (e.touches.length === 1) { [x0, y0, t0] = [t.clientX, t.clientY, Date.now()]; pinched = false; }
+      if (e.touches.length === 2) pinch0 = span(e.touches);
     }, { passive: true });
+    // Pinching sizes the text, like Books, instead of Safari zooming the whole page
+    // (which would leave the reader's controls off screen).
+    D.addEventListener('touchmove', (e) => {
+      if (e.touches.length < 2) return;
+      e.preventDefault();
+      pinched = true;
+      const now = span(e.touches);
+      if (!pinch0) { pinch0 = now; return; }
+      const r = now / pinch0;
+      if (r > 1.18 || r < 1 / 1.18) { key(r > 1 ? '+' : '-'); pinch0 = now; }
+    }, { passive: false });
+    // Safari's own pinch and double-tap zoom, on the reader and on the page under it.
+    D.documentElement.style.touchAction = 'pan-x pan-y';
+    const noZoom = (e) => { if (frame && frame.style.display !== 'none') e.preventDefault(); };
+    for (const target of [D, document]) {
+      for (const g of ['gesturestart', 'gesturechange', 'gestureend']) target.addEventListener(g, noZoom, { passive: false });
+    }
     D.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) pinch0 = 0;
       const t = e.changedTouches[0];
       const dx = t.clientX - x0, dy = t.clientY - y0;
       const mode = W.__gr?.S?.mode;
+      if (pinched || e.target.closest?.('#notes')) return;
       if (e.touches.length || Date.now() - t0 > 700 || mode === 'column' || mode === 'prompter') return;
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) key(dx < 0 ? 'ArrowRight' : 'ArrowLeft');
       else if (mode !== 'book' && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx) * 1.5) key(dy < 0 ? 'ArrowDown' : 'ArrowUp');
