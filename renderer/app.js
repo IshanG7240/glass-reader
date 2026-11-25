@@ -122,6 +122,7 @@ function blockHTML(b, i) {
     case 'li': return `<div ${attrs(['li'])} style="--depth:${b.depth || 0}"><span class="mk">${esc(b.marker || '•')}</span><div>${b.html}</div></div>`;
     case 'code': return `<pre ${attrs()}><code>${codeHTML(b)}</code></pre>`;
     case 'table': return `<div ${attrs(['tbl'])}>${b.html}</div>`;
+    case 'ui': return `<div ${attrs(['ui'])}>${b.html}</div>`;
     case 'img': return `<figure ${attrs()}>${imgHTML(b)}${caption(b)}</figure>`;
     case 'diagram': return `<figure ${attrs(['diagram'])}>${diagramHTML(b)}</figure>`;
     case 'math': return `<div ${attrs(['math'])}>${b.html}</div>`;
@@ -136,7 +137,12 @@ function imgHTML(b) {
 }
 function caption(b) {
   const a = b.alt || '';
-  return a.length > 3 && !/\.(png|jpe?g|gif|svg|webp)$/i.test(a) ? `<figcaption>${esc(a)}</figcaption>` : '';
+  const text = a.length > 3 && !/\.(png|jpe?g|gif|svg|webp)$/i.test(a) ? esc(a) : '';
+  // A picture from a web page (ChatGPT's picture searches): where it's from, as a link.
+  let site = '';
+  try { site = b.href ? new URL(b.href).hostname.replace(/^www\./, '') : ''; } catch { /* not an address */ }
+  const link = site ? `<a href="${esc(b.href)}">${esc(site)}</a>` : '';
+  return text || link ? `<figcaption>${[text, link].filter(Boolean).join(' · ')}</figcaption>` : '';
 }
 function diagramHTML(b) {
   if (b.svg) return b.svg;
@@ -263,6 +269,7 @@ function makeChunks(blocks) {
     if (b.type === 'hr') return;
     if (b.type === 'code') return out.push({ block: i, kind: 'code', html: `<pre><code>${codeHTML(b)}</code></pre>`, text: b.text, ps: true });
     if (b.type === 'table') return out.push({ block: i, kind: 'table', html: b.html, text: b.text, ps: true });
+    if (b.type === 'ui') return out.push({ block: i, kind: 'ui', html: b.html, text: b.text, ps: true });
     if (b.type === 'img') return out.push({ block: i, kind: 'img', html: imgHTML(b) + caption(b), text: b.alt || '', ps: true });
     if (b.type === 'diagram') return out.push({ block: i, kind: 'diagram', html: diagramHTML(b), text: '', ps: true });
     if (b.type === 'math') return out.push({ block: i, kind: 'math', html: b.html, text: b.text, ps: true });
@@ -415,7 +422,7 @@ function startKaraoke(el, ms) {
   void el.offsetWidth;
   el.classList.add('karaoke');
 }
-const wrappable = (c) => !['code', 'table', 'img', 'diagram', 'math'].includes(c.kind);
+const wrappable = (c) => !['code', 'table', 'img', 'diagram', 'math', 'ui'].includes(c.kind);
 
 // ---------- auto-play (Focus & Cinema step chunks; Prompter scrolls) ----------
 
@@ -639,7 +646,7 @@ const Focus = {
     this.last = null;
     this.track.addEventListener('click', (e) => {
       const c = e.target.closest('.chunk');
-      if (c && !e.target.closest('a') && +c.dataset.c !== st.chunk) jumpChunk(+c.dataset.c);
+      if (c && !e.target.closest('a, label, input') && +c.dataset.c !== st.chunk) jumpChunk(+c.dataset.c);
     });
   },
   chunkDiv(c, i, d) {
@@ -734,7 +741,7 @@ const Cinema = {
     if (this.el && wrappable(c)) startKaraoke(this.el, playDur);
   },
   wheel(d) { stepChunk(d); },
-  click(e) { if (!e.target.closest('a')) stepChunk(e.clientX < innerWidth * 0.3 ? -1 : 1); },
+  click(e) { if (!e.target.closest('a, label, input')) stepChunk(e.clientX < innerWidth * 0.3 ? -1 : 1); },
   key: chunkKeys,
 };
 
@@ -1092,6 +1099,7 @@ stage.addEventListener('click', (e) => {
   const a = e.target.closest('a[href]');
   if (a) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); return; }
   if (getSelection().toString()) return;
+  if (e.target.closest('.gr-ui label, .gr-ui input')) return; // answering a quiz, not turning the page
   mode?.click?.(e);
 });
 

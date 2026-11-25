@@ -146,6 +146,143 @@ function chatgptImageConversation() {
   return { title: 'Eigenvalues with pictures', current_node: parent, mapping };
 }
 
+// ---------- A shared ChatGPT link (/share/…): the conversation is in the page ----------
+// As React Router puts it there: a "turbo-stream" (a flat list; objects hold the positions
+// of their keys and values) passed to streamController.enqueue() in a <script>.
+const CHATGPT_SHARE_ID = '6b07aaaa-1111-2222-3333-444455556666';
+const turbo = (root) => {
+  const out = [], seen = new Map();
+  const put = (v) => {
+    if (v === null) return -5;
+    if (v === undefined) return -7;
+    if (typeof v !== 'object') {
+      const k = typeof v + ':' + v;
+      if (!seen.has(k)) { seen.set(k, out.length); out.push(v); }
+      return seen.get(k);
+    }
+    const i = out.length;
+    out.push(null);
+    if (Array.isArray(v)) out[i] = v.map(put);
+    else { const o = {}; for (const [k, x] of Object.entries(v)) o['_' + put(k)] = put(x); out[i] = o; }
+    return i;
+  };
+  put(root);
+  return JSON.stringify(out) + '\n';
+};
+const IMG = (n) => `https://images.openai.com/static-rsc-4/pic${n}?purpose=fullsize`;
+const SHARE_ANSWER = `Here is the pipeline, in order.
+
+<box border radius="xl" padding={3} gap={3}>
+  **A document AI pipeline**
+  <box background="rgba(59,130,246,0.09)" radius="lg" padding={3} align="center" gap={1}>
+    **1. Sources**
+    <text color="secondary" size="xs">PDFs · Excel · Images</text>
+  </box>
+  <box align="center">
+    <icon name="arrow-down" color="secondary" size="lg"/>
+  </box>
+  <box border={{size:1,color:"#8B5CF6"}} radius="lg" padding={3} align="center" gap={1}>
+    **2. Retrieval**
+    <text color="secondary" size="xs">Search · Rerank</text>
+  </box>
+</box>
+
+<grid columns={2} gap={2}>
+  <grid-item>
+    <box border radius="lg" padding={2} gap={1}>
+      <row align="center">
+        <icon name="file-pdf" color="danger" size="xl"/>
+        **SOP.pdf**
+      </row>
+      <text color="secondary" size="xs">Procedures</text>
+    </box>
+  </grid-item>
+  <grid-item>
+    <box border radius="lg" padding={2} gap={1}>
+      <row align="center" justify="between">
+        **Quality.xlsx**
+        <badge color="success">Clean</badge>
+      </row>
+      <text color="danger" weight="medium">Result: rejected</text>
+    </box>
+  </grid-item>
+</grid>
+
+<AsyncImage query="OCR bounding boxes example" aspectRatio="16:9" width="100%"/>
+
+Vector databases:
+- <Entity value="Pinecone" category="software" disambig="Vector database"/>
+- <Entity value="Qdrant" category="software" disambig="Vector database"/>
+
+\`\`\`json
+{ "document_type": "inspection_report", "result": "Rejected" }
+\`\`\`
+
+<box border radius="lg" padding={3} gap={2}>
+  **Reranking scores**
+  {#each [{name:"SOP",score:96},{name:"Attendance policy",score:4}] as item}
+    <row justify="between" align="center">
+      <text size="sm">{item.name}</text>
+      <text tabularNums color="secondary" size="xs">{item.score}/100</text>
+    </row>
+    <box background="surface-tertiary" height="7px" radius="full" clip>
+      <box background={item.score>70?"#16A34A":"#94A3B8"} height="7px" radius="full" width={\`\${item.score}%\`}/>
+    </box>
+  {/each}
+</box>
+
+Which would you use first?
+
+<radio-group direction="col">
+  <radio value="a">Keyword search</radio>
+  <radio value="b">Vector search</radio>
+</radio-group>
+
+<svg width="120" height="60" viewBox="0 0 120 60"><rect x="4" y="4" width="112" height="52" rx="8" fill="none" stroke="#333"/><text x="60" y="35" text-anchor="middle">RAG</text></svg>
+
+{@body const questions=[{q:"Which step reads scanned text?",opts:["RAG","OCR"],a:1,why:"OCR turns pictures of text into text."}]}
+{@body const [answers,setAnswers]=DIL.useState({})}
+<box border radius="xl" padding={3} gap={3}>
+  <row justify="between" align="center">
+    **Checkpoint**
+    <badge color="info">{Object.keys(answers).length}/1 answered</badge>
+  </row>
+  {#each questions as q,i}
+    **{i+1}. {q.q}**
+    <radio-group value={answers[i]} onChange={v=>setAnswers(p=>({...p,[i]:Number(v)}))}>
+      {#each q.opts as opt,j}<radio value={String(j)}>{opt}</radio>{/each}
+    </radio-group>
+  {/each}
+</box>
+
+If you want, I can go deeper.`;
+function chatgptShared() {
+  const mapping = { root: { message: null, parent: null } };
+  let parent = 'root';
+  const add = (id, message) => { mapping[id] = { id, parent, message: { id, ...message } }; parent = id; };
+  add('u1', { author: { role: 'user' }, content: { content_type: 'text', parts: ['How does document AI and RAG work, in order?'] } });
+  const tagAt = (t) => [SHARE_ANSWER.indexOf(t), SHARE_ANSWER.indexOf(t) + t.length];
+  const pic = '<AsyncImage query="OCR bounding boxes example" aspectRatio="16:9" width="100%"/>';
+  const fence = '```json\n{ "document_type": "inspection_report", "result": "Rejected" }\n```';
+  add('a1', {
+    author: { role: 'assistant' }, recipient: 'all',
+    content: { content_type: 'text', parts: [SHARE_ANSWER] },
+    metadata: {
+      genui_components: [{ type: 'async_image', start_index: tagAt(pic)[0], end_index: tagAt(pic)[1],
+        safe_urls: [{ url: 'https://example.com/ocr-article' }, { url: IMG(1) }, { url: IMG(1).replace('fullsize', 'inline') }] }],
+      content_references: [
+        { type: 'client_defined_widget', category: 'code_block', matched_text: fence, start_idx: tagAt(fence)[0], end_idx: tagAt(fence)[1] },
+        { type: 'hidden', matched_text: '', start_idx: 0, end_idx: 0 },
+      ],
+    },
+  });
+  const conversation = { title: 'Document AI, shared', current_node: parent, mapping, conversation_id: CHATGPT_SHARE_ID };
+  const data = { loaderData: { root: {}, 'routes/share.$shareId.($action)': { sharedConversationId: CHATGPT_SHARE_ID, serverResponse: { type: 'data', data: conversation } } }, actionData: null, errors: null };
+  return html('ChatGPT - Document AI, shared', `<main><h1>Document AI, shared</h1><p>${SHARE_ANSWER.slice(0, 200).replace(/</g, '&lt;')}…</p></main>
+<script nonce="${NONCE}">window.__reactRouterContext = { streamController: { enqueue() {} } };</script>
+<script nonce="${NONCE}">window.__reactRouterContext.streamController.enqueue(${JSON.stringify(turbo(data))});</script>`);
+}
+
 // ---------- ChatGPT when its API won't answer: read from the page itself ----------
 const CHATGPT_DOM_ID = '6731f0aa-0000-1111-2222-333344445555';
 const gptDomTurn = (i) => `<article data-testid="conversation-turn-${i * 2 + 1}"><div data-message-author-role="user" data-message-id="u${i}">
@@ -172,6 +309,7 @@ exports.sites = {
 <div data-message-author-role="assistant" data-message-id="m5"><img src="/files/matrix.png" width="200" height="150" alt=""></div>
 <script nonce="${NONCE}">fetch('/backend-api/search/images?q=' + encodeURIComponent('matrix') + '&n=3');</script>`) },
       { match: /^\/c\//, body: html('Eigenvalues, intuitively | ChatGPT', transcript(8)) },
+      { match: new RegExp(`^/share/${CHATGPT_SHARE_ID}`), body: chatgptShared },
       { match: /^\/api\/auth\/session$/, body: { accessToken: 'test-token' } },
       { match: new RegExp(`^/backend-api/conversation/${CHATGPT_DOM_ID}$`), body: { __status: 401 } },
       { match: new RegExp(`^/backend-api/conversation/${CHATGPT_IMG_ID}$`), body: chatgptImageConversation },
@@ -182,6 +320,8 @@ exports.sites = {
       { match: /^\/files\/.+\.png$/, body: PNG },
     ],
   },
+  // Pictures ChatGPT looked up, as it keeps them (public addresses, shown cross-origin).
+  'images.openai.com': { corp: 'cross-origin', routes: [{ match: /^\/static-rsc-4\//, body: PNG }] },
   'claude.ai': {
     headers: {
       'content-security-policy': `default-src 'none'; script-src 'nonce-${NONCE}' 'unsafe-eval'; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; frame-src 'self' blob:; child-src 'self' blob:; worker-src blob:; base-uri 'self'`,
@@ -210,7 +350,11 @@ exports.pages = {
   gemini: 'https://gemini.google.com/app/5f2e8a1c9b3d',
   'chatgpt-images': `https://chatgpt.com/c/${CHATGPT_IMG_ID}`,
   'chatgpt-page': `https://chatgpt.com/c/${CHATGPT_DOM_ID}`,
+  'chatgpt-share': `https://chatgpt.com/share/${CHATGPT_SHARE_ID}`,
 };
 // Pictures the reader should show (at least).
-exports.expectImages = { 'chatgpt-images': 6 };
-exports.expectTurns = { chatgpt: QUESTIONS.length, claude: QUESTIONS.length, gemini: QUESTIONS.length, 'chatgpt-images': 4, 'chatgpt-page': 5 };
+exports.expectImages = { 'chatgpt-images': 6, 'chatgpt-share': 1 };
+// Blocks of a type the reader should make (at least): ChatGPT's cards, rows, grids, quiz
+// and poll as "ui" blocks; its code block kept; the inline drawing as a picture.
+exports.expectTypes = { 'chatgpt-share': { ui: 5, code: 1, img: 2 } };
+exports.expectTurns = { chatgpt: QUESTIONS.length, claude: QUESTIONS.length, gemini: QUESTIONS.length, 'chatgpt-images': 4, 'chatgpt-page': 5, 'chatgpt-share': 1 };

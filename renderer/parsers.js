@@ -188,6 +188,58 @@ function sanitize(src, allow, keepRoot = false) {
   return out.innerHTML.trim();
 }
 
+// A chat's own UI drawn as it was (ChatGPT's cards, rows, grids, quizzes, polls; see
+// uiHtml() in extension/browser/background.js): <div class="gr-ui"> and what's in it, kept
+// whole as one block. Only a fixed vocabulary survives: these tags, data-* tokens, and
+// a few CSS variables whose values must be plain colours or lengths (no url(), nothing
+// that can load or run anything). Radio buttons stay, so a quiz can be answered.
+const UI_TAGS = new Set([...INLINE_OK, 'div', 'span', 'p', 'ul', 'ol', 'li', 'img', 'label', 'input', 'figure', 'figcaption',
+  'blockquote', 'pre', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr']);
+const UI_DATA = /^data-(ui|tone|size|weight|align|justify|direction|border|bg|clip|nums|grow|ok)$/;
+const UI_VAR = /^--(bg|bd|fc|w|h|pad|gap|r|cols)$/;
+const UI_VAL = /^(#[\da-f]{3,8}|(rgba?|hsla?)\([\d.,%\s/]+\)|\d+(\.\d+)?(px|%|em|rem)?)$/i;
+function sanitizeUI(src) {
+  const copy = (from, to) => {
+    for (const n of from.childNodes) {
+      if (n.nodeType === 3) { to.append(n.nodeValue); continue; }
+      if (n.nodeType !== 1) continue;
+      const t = n.localName.toLowerCase();
+      if (t === 'gr-math') { to.append(mathNode(n)); continue; }
+      if (t === 'svg') { const src = svgSrc(n); if (src) { const i = document.createElement('img'); i.src = src; i.className = 'ink'; to.append(i); } continue; }
+      if (SKIP.has(t) && t !== 'input') continue;
+      if (!UI_TAGS.has(t)) { copy(n, to); continue; }
+      if (t === 'input' && !/^(radio|checkbox)$/.test(n.getAttribute('type') || '')) continue;
+      const e = document.createElement(/^h[1-6]$/.test(t) ? 'strong' : t);
+      for (const at of n.attributes) {
+        const k = at.name.toLowerCase(), v = at.value;
+        if (UI_DATA.test(k) && /^[\w-]{0,40}$/.test(v)) e.setAttribute(k, v);
+        else if (k === 'style') {
+          const ok = v.split(';').map((d) => d.split(':').map((x) => x.trim())).filter(([p, x]) => UI_VAR.test(p || '') && UI_VAL.test(x || ''));
+          if (ok.length) e.setAttribute('style', ok.map(([p, x]) => `${p}:${x}`).join(';'));
+        } else if (k === 'href' && t === 'a' && /^https?:/i.test(v)) e.setAttribute('href', v);
+        else if (k === 'src' && t === 'img' && (/^https?:/i.test(v) || SHOWABLE.test(v))) e.setAttribute('src', v);
+        else if (k === 'alt' && t === 'img') e.setAttribute('alt', v);
+        else if (t === 'input' && (k === 'type' || (k === 'name' && /^[\w-]{1,40}$/.test(v)))) e.setAttribute(k, v);
+        else if ((k === 'colspan' || k === 'rowspan') && /^\d{1,2}$/.test(v)) e.setAttribute(k, v);
+      }
+      copy(n, e);
+      to.append(e);
+    }
+  };
+  const root = document.createElement('div');
+  root.className = 'gr-ui';
+  copy(src, root);
+  for (const at of src.attributes) {
+    if (UI_DATA.test(at.name) && /^[\w-]{0,40}$/.test(at.value)) root.setAttribute(at.name, at.value);
+  }
+  const st = src.getAttribute('style');
+  const ok = (st || '').split(';').map((d) => d.split(':').map((x) => x.trim())).filter(([p, x]) => UI_VAR.test(p || '') && UI_VAL.test(x || ''));
+  if (ok.length) root.setAttribute('style', ok.map(([p, x]) => `${p}:${x}`).join(';'));
+  // Empty paragraphs and wrappers Markdown left behind take no space.
+  root.querySelectorAll('p').forEach((p) => { if (!p.textContent.trim() && !p.querySelector('img, input, .gr-math')) p.remove(); });
+  return root.outerHTML;
+}
+
 // Removed / added in a rendered diff: <del>/<ins> around blocks, or GitHub's rich diff
 // of Markdown files, which marks whole blocks with "removed" / "added" classes.
 function changeOf(el, t) {
@@ -208,6 +260,21 @@ function hasBlockChild(el) {
 
 const SHOWABLE = /^data:image\/(png|jpe?g|gif|webp|avif|bmp|svg\+xml)[;,]/i;
 
+// An inline <svg> as an image address (shown as <img>, so nothing inside it can run).
+// skipIcons: none for the small ones (icons beside text).
+function svgSrc(svg, skipIcons = false) {
+  const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+  const w = parseFloat(svg.getAttribute('width')) || vb[2] || 0;
+  const h = parseFloat(svg.getAttribute('height')) || vb[3] || 0;
+  if (skipIcons && w && h && (w < 48 || h < 32)) return '';
+  const c = svg.cloneNode(true);
+  c.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  c.querySelectorAll('script, foreignObject').forEach((x) => x.remove());
+  for (const el of [c, ...c.querySelectorAll('*')]) for (const at of [...el.attributes]) if (/^on/i.test(at.name)) el.removeAttribute(at.name);
+  const xml = new XMLSerializer().serializeToString(c);
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+}
+
 export function htmlToBlocks(root, opts = {}) {
   normalizeMath(root);
   const blocks = [];
@@ -216,20 +283,13 @@ export function htmlToBlocks(root, opts = {}) {
     if (!src) return;
     if (src.startsWith('data:')) { if (!SHOWABLE.test(src)) return; } // e.g. EMF/WMF from Word
     else if (!/^(blob:|https?:)/i.test(src)) src = opts.resolveImage?.(src) || '';
-    if (src) blocks.push({ type: 'img', src, alt: norm(img.getAttribute('alt') || img.getAttribute('title') || ''), text: '' });
+    const href = img.closest?.('a[href]')?.getAttribute('href') || '';
+    if (src) blocks.push({ type: 'img', src, alt: norm(img.getAttribute('alt') || img.getAttribute('title') || ''), text: '', ...(/^https?:/i.test(href) ? { href } : {}) });
   };
   // Inline SVG drawings become images (as <img>, nothing inside them can run).
   const pushSvg = (svg) => {
-    const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
-    const w = parseFloat(svg.getAttribute('width')) || vb[2] || 0;
-    const h = parseFloat(svg.getAttribute('height')) || vb[3] || 0;
-    if (w && h && (w < 48 || h < 32)) return; // icons
-    const c = svg.cloneNode(true);
-    c.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    c.querySelectorAll('script, foreignObject').forEach((x) => x.remove());
-    const xml = new XMLSerializer().serializeToString(c);
-    const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
-    blocks.push({ type: 'img', src, alt: norm(svg.querySelector('title')?.textContent), text: '', ink: true });
+    const src = svgSrc(svg, true);
+    if (src) blocks.push({ type: 'img', src, alt: norm(svg.querySelector('title')?.textContent), text: '', ink: true });
   };
   const pushDiagram = (lang, source) => blocks.push({ type: 'diagram', lang, text: source.replace(/\n+$/, '') });
   const pushPara = (el, ctx, type = 'p') => {
@@ -296,6 +356,11 @@ export function htmlToBlocks(root, opts = {}) {
       if (n.nodeType !== 1) continue;
       const t = n.localName.toLowerCase();
       if (t === 'svg') { flush(ctx); pushSvg(n); continue; }
+      if (t === 'div' && n.classList.contains('gr-ui') && !ctx.quote) {
+        flush(ctx);
+        blocks.push({ type: 'ui', html: sanitizeUI(n), text: norm(n.textContent) });
+        continue;
+      }
       if (isDisplayMath(n)) {
         flush(ctx);
         blocks.push({ type: 'math', html: mathNode(n).outerHTML, text: norm(n.textContent) });

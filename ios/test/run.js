@@ -46,7 +46,7 @@ async function serve(req) {
   if (!hit) return new Response('not found: ' + u.pathname, { status: 404 });
   const body = typeof hit.body === 'function' ? hit.body(u) : hit.body;
   if (body?.__status) return new Response('', { status: body.__status });
-  if (Buffer.isBuffer(body)) return new Response(body, { headers: { 'content-type': 'image/png', 'cross-origin-resource-policy': 'same-origin' } });
+  if (Buffer.isBuffer(body)) return new Response(body, { headers: { 'content-type': 'image/png', 'cross-origin-resource-policy': site.corp || 'same-origin' } });
   const json = typeof body !== 'string';
   return new Response(json ? JSON.stringify(body) : body, {
     headers: { 'content-type': json ? 'application/json' : 'text/html; charset=utf-8', ...(json ? {} : site.headers) },
@@ -83,6 +83,8 @@ async function run(name, url, [w, h]) {
       shown: !!f && f.style.display !== 'none',
       title: doc?.title, blocks: doc?.blocks.length,
       turns: doc?.blocks.filter((b) => b.anchor?.startsWith('gr-turn')).length,
+      count: doc && doc.blocks.reduce((m, b) => (m[b.type] = (m[b.type] || 0) + 1, m), {}),
+      quiz: f ? f.contentDocument.querySelectorAll('.gr-ui input[type=radio]').length : 0,
       types: doc && Object.entries(doc.blocks.reduce((m, b) => (m[b.type] = (m[b.type] || 0) + 1, m), {})).map(([k, v]) => k + ':' + v).join(' '),
       math: f?.contentDocument.querySelectorAll('.katex').length,
       imgs: f ? [...f.contentDocument.querySelectorAll('.doc img')].filter((i) => i.complete && i.naturalWidth).length : 0,
@@ -90,7 +92,7 @@ async function run(name, url, [w, h]) {
       raw: doc ? doc.blocks.filter((b) => b.type !== 'code' && /<\\/?[A-Za-z][\\w-]*[^>]*>/.test(b.text || '')).length : 0, // markup shown as text
       // template code, citation markers or Markdown syntax shown as text
       junk: doc ? doc.blocks.filter((b) => b.type !== 'code' && /\\{[@#/:][a-z]|[\\ue200-\\ue2ff]|【|^#{1,6}\\s/.test(b.text || '')).map((b) => b.text.slice(0, 60)) : [],
-      dump: doc ? doc.blocks.map((b) => b.type.padEnd(6) + (b.type === 'img' ? b.src.slice(0, 60) + ' ' + b.alt : b.text)).join('\\n') : '',
+      dump: doc ? doc.blocks.map((b) => b.type.padEnd(6) + (b.type === 'img' ? b.src.slice(0, 60) + ' ' + b.alt : b.type === 'ui' ? b.html : b.text)).join('\\n') : '',
       pos: gr?.st.pos, theme: B?.dataset.theme,
       fonts: f && [...f.contentDocument.fonts].filter((x) => x.status === 'loaded').length,
       toast: f?.contentDocument.querySelector('#toast')?.textContent,
@@ -130,7 +132,10 @@ app.whenReady().then(async () => {
       const name = `${site}-${size}`;
       if (only.length && !only.includes(name)) continue;
       const { state, errors } = await run(name, url, dims).catch((e) => ({ state: {}, errors: ['harness: ' + (e.stack || e).toString().slice(0, 400)] }));
-      const ok = state.shown && state.blocks > 5 && state.turns === F.expectTurns[site] && state.imgs >= (F.expectImages[site] || 0) && state.longest < 1500 && !state.raw && !state.junk.length && state.closed && !errors.length;
+      const want = F.expectTypes?.[site] || {};
+      const typesOk = Object.entries(want).every(([t, n]) => (state.count?.[t] || 0) >= n);
+      delete state.count;
+      const ok = typesOk && state.shown && state.blocks > 5 && state.turns === F.expectTurns[site] && state.imgs >= (F.expectImages[site] || 0) && state.longest < 1500 && !state.raw && !state.junk.length && state.closed && !errors.length;
       if (!ok) failed++;
       console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`, JSON.stringify(state));
       for (const e of errors) console.log('     ', e);

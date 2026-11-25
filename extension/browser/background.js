@@ -589,7 +589,13 @@ async function extract() {
     }
   };
 
-  // A quiz's questions, whatever the fields are called: the questions and their answers.
+  // A quiz's questions, whatever the fields are called: each question with its options to
+  // tap (the reader shows right or wrong, and the explanation, once one is picked: no
+  // script, just CSS on the chosen radio button). Without an answer key it's a poll:
+  // options to pick, nothing to reveal.
+  let uiSeq = 0;
+  const uiId = () => `gr${Date.now().toString(36).slice(-4)}${(uiSeq++).toString(36)}`;
+  const escH = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const quizMd = (xs) => {
     if (!Array.isArray(xs) || !xs.length || !xs.every((x) => x && typeof x === 'object')) return null;
     const pick = (x, keys, ok) => keys.find((k) => k in x && ok(x[k]));
@@ -600,16 +606,23 @@ async function extract() {
     const ak = pick(xs[0], ['answer', 'a', 'correct', 'correctIndex', 'correctAnswer', 'ans', 'solution', 'answerIndex'], (v) => v != null);
     const wk = pick(xs[0], ['explanation', 'why', 'explain', 'rationale', 'feedback', 'reason', 'hint'], (v) => typeof v === 'string');
     const L = (i) => String.fromCharCode(65 + i);
-    return xs.map((x, n) => {
+    const qs = xs.map((x, n) => {
       const opts = Array.isArray(x[ok]) ? x[ok].map(String) : [];
       const a = x[ak];
       const idx = (Array.isArray(a) ? a : [a]).map((v) => (typeof v === 'number' ? v
         : typeof v === 'string' ? (/^[A-Za-z]$/.test(v.trim()) && opts.length <= 26 ? v.trim().toUpperCase().charCodeAt(0) - 65
           : opts.findIndex((o) => o.trim().toLowerCase() === v.trim().toLowerCase())) : -1)).filter((i) => i >= 0 && i < opts.length);
       const why = wk && typeof x[wk] === 'string' ? x[wk].trim() : '';
-      const ans = idx.length ? `**Answer: ${idx.map((i) => `${L(i)}. ${opts[i]}`).join('; ')}**${why ? ' — ' + why : ''}` : why;
-      return [`**Q${n + 1}. ${String(x[qk]).trim()}**`, opts.map((o, i) => `- ${L(i)}. ${o}`).join('\n'), ans && '> ' + ans].filter(Boolean).join('\n\n');
-    }).join('\n\n');
+      const name = uiId();
+      const ans = idx.length ? `**Answer: ${idx.map((i) => `${L(i)}. ${escH(opts[i])}`).join('; ')}**${why ? ' — ' + escH(why) : ''}` : escH(why);
+      return [
+        '<div data-ui="q">', '', `**${n + 1}. ${escH(String(x[qk]).trim())}**`, '',
+        ...opts.flatMap((o, i) => [`<label data-ui="opt"${idx.includes(i) ? ' data-ok="1"' : ''}><input type="radio" name="${name}"> <b>${L(i)}</b> ${escH(o)}</label>`, '']),
+        ...(ans ? ['<div data-ui="why">', '', ans, '', '</div>'] : []),
+        '</div>',
+      ].join('\n');
+    });
+    return `<div class="gr-ui" data-ui="quiz">\n\n${qs.join('\n\n')}\n\n</div>`;
   };
 
   const PICTURE = /^(Async\w*|\w*Image\w*|\w*Photo\w*|Picture|image|img)$/;
@@ -623,10 +636,163 @@ async function extract() {
     const m = new RegExp(`(?:^|\\s)${k}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|\\{\\s*(?:"([^"]*)"|'([^']*)')\\s*\\})`).exec(attrs || '');
     return m ? m[1] ?? m[2] ?? m[3] ?? m[4] : null;
   };
+  // ChatGPT's UI components as HTML the reader can draw: <div data-ui="box|row|grid|…">
+  // with data-* tokens (tone, size, align…) and a few CSS variables for its colours and
+  // sizes, all checked here and again by the reader's sanitizer. Markdown inside stays
+  // Markdown (each tag on its own line, blank lines around the text, so the Markdown
+  // reader reads both).
+  const ISLAND = /^(box|card|callout|row|hstack|vstack|stack|grid|radio-group|checkbox-group|panel)$/i;
+  const UI_BOX = /^(box|card|callout|stack|vstack|column|col|section|group|container|panel|grid-item|center|carousel|tabs|tab)$/i;
+  const UI_ROW = /^(row|hstack)$/i;
+  const UI_OPTS = /^(radio-group|checkbox-group|select|options)$/i;
+  const parseAttrs = (s = '') => {
+    const out = Object.create(null);
+    let j = 0;
+    while (j < s.length) {
+      j += /^\s*/.exec(s.slice(j))[0].length;
+      if (j >= s.length) break;
+      if (s[j] === '{') { const e = skipBalanced(s, j); if (e < 0) break; j = e; continue; } // {...spread}
+      const a = /^[^\s=>/"'{}<]+/.exec(s.slice(j));
+      if (!a) { j++; continue; }
+      j += a[0].length;
+      const eq = /^\s*=\s*/.exec(s.slice(j));
+      if (!eq) { out[a[0]] = true; continue; }
+      j += eq[0].length;
+      const q = s[j];
+      if (q === '"' || q === "'") { const e = s.indexOf(q, j + 1); if (e < 0) break; out[a[0]] = s.slice(j + 1, e).replace(/&quot;/g, '"'); j = e + 1; }
+      else if (q === '{') {
+        const e = skipBalanced(s, j);
+        if (e < 0) break;
+        const inner = s.slice(j + 1, e - 1).trim(), str = /^(["'])((?:(?!\1)[^\\]|\\.)*)\1$/.exec(inner);
+        out[a[0]] = str ? unesc(str[2]) : inner;
+        j = e;
+      } else { const v = /^[^\s>]*/.exec(s.slice(j))[0]; out[a[0]] = v; j += v.length || 1; }
+    }
+    return out;
+  };
+  const uiColor = (v) => (typeof v === 'string' && (/^#[\da-f]{3,8}$/i.test(v) || /^(rgba?|hsla?)\([\d.,%\s/]+\)$/i.test(v)) ? v : null);
+  const uiTok = (v) => (typeof v === 'string' && /^[a-z][\w-]{0,30}$/i.test(v) ? v.toLowerCase() : null);
+  const uiLen = (v) => (typeof v === 'string' && /^\d+(\.\d+)?(px|%|em|rem)$/.test(v.trim()) ? v.trim() : /^\d+(\.\d+)?$/.test(String(v)) ? `${v}px` : null);
+  const uiStep = (v) => (/^\d+(\.\d+)?$/.test(String(v)) ? `${+(Math.min(+v, 10) * 0.28).toFixed(2)}em` : null);
+  const RADIUS = { none: '0', xs: '3px', sm: '5px', md: '8px', lg: '12px', xl: '16px', '2xl': '20px', full: '999px' };
+  const uiAttrs = (kind, a, root, extra = '') => {
+    const d = { ui: kind }, v = {};
+    const bg = a.background ?? a.bg ?? a.fill;
+    if (uiColor(bg)) v.bg = bg; else if (uiTok(bg)) d.bg = uiTok(bg);
+    const col = a.color ?? a.tone ?? a.variant;
+    if (uiColor(col)) v.fc = col; else if (uiTok(col)) d.tone = uiTok(col);
+    if (a.border != null && a.border !== false && a.border !== 'false' && a.border !== 'none') {
+      d.border = '1';
+      const bc = typeof a.border === 'string' && (/color\s*:\s*["']([^"']+)["']/.exec(a.border)?.[1] || a.borderColor || a.border);
+      if (uiColor(bc)) v.bd = bc;
+    }
+    if (uiColor(a.borderColor)) { d.border = '1'; v.bd = a.borderColor; }
+    for (const k of ['size', 'weight', 'align', 'justify', 'direction']) if (uiTok(a[k])) d[k] = uiTok(a[k]);
+    if (a.clip) d.clip = '1';
+    if (a.tabularNums) d.nums = '1';
+    if (uiStep(a.padding ?? a.p)) v.pad = uiStep(a.padding ?? a.p);
+    if (uiStep(a.gap)) v.gap = uiStep(a.gap);
+    if (uiLen(a.width)) v.w = uiLen(a.width);
+    if (uiLen(a.height)) v.h = uiLen(a.height);
+    if (RADIUS[a.radius] || (a.radius && uiLen(a.radius))) v.r = RADIUS[a.radius] || uiLen(a.radius);
+    if (/^\d$/.test(String(a.columns ?? a.cols ?? ''))) v.cols = String(a.columns ?? a.cols);
+    if (a.flex != null) d.grow = '1';
+    const style = Object.entries(v).map(([k, x]) => `--${k}:${x}`).join(';');
+    return `${root ? ' class="gr-ui"' : ''}${Object.entries(d).map(([k, x]) => ` data-${k}="${escH(x)}"`).join('')}${style ? ` style="${escH(style)}"` : ''}${extra}`;
+  };
+  // Icons by name (ChatGPT's are Lucide-style names) → a character in the text's colour.
+  const ICONS = {
+    'arrow-down': '↓', 'arrow-up': '↑', 'arrow-right': '→', 'arrow-left': '←', 'arrow-down-up': '⇅', 'arrow-up-down': '⇅',
+    'arrow-left-right': '⇄', 'arrow-right-left': '⇄', 'move-down': '↓', 'move-right': '→', 'corner-down-right': '↳',
+    'chevron-down': '⌄', 'chevron-up': '⌃', 'chevron-right': '›', 'chevron-left': '‹', 'chevrons-right': '»',
+    check: '✓', 'check-circle': '✓', 'circle-check': '✓', 'check-square': '☑', x: '✕', 'x-circle': '✕', 'circle-x': '✕', close: '✕',
+    plus: '+', minus: '−', equal: '=', 'alert-triangle': '⚠', 'triangle-alert': '⚠', warning: '⚠', 'alert-circle': '!', 'circle-alert': '!',
+    info: 'ℹ', 'help-circle': '?', 'circle-help': '?', question: '?', star: '★', heart: '♥', flag: '⚑', bookmark: '🔖',
+    database: '🗄', server: '🖥', cpu: '🖥', monitor: '🖥', laptop: '💻', smartphone: '📱', cloud: '☁', globe: '🌐', wifi: '📶',
+    file: '📄', 'file-text': '📄', 'file-pdf': '📄', 'file-spreadsheet': '📊', 'file-image': '🖼', 'file-code': '📄', files: '🗂', folder: '📁',
+    image: '🖼', camera: '📷', video: '🎬', music: '♪', mic: '🎤', search: '🔍', 'zoom-in': '🔍', filter: '⏷', settings: '⚙', cog: '⚙',
+    wrench: '🔧', tool: '🔧', hammer: '🔨', factory: '🏭', building: '🏢', home: '⌂', 'map-pin': '📍', map: '🗺', compass: '🧭',
+    lightbulb: '💡', zap: '⚡', bolt: '⚡', flame: '🔥', sparkles: '✨', sparkle: '✨', brain: '🧠', bot: '🤖', target: '◎', rocket: '🚀',
+    clock: '🕒', timer: '⏱', calendar: '📅', hourglass: '⏳', history: '↺', refresh: '↻', 'rotate-ccw': '↺', 'rotate-cw': '↻', repeat: '🔁',
+    user: '👤', users: '👥', 'user-check': '👤', mail: '✉', 'message-circle': '💬', 'message-square': '💬', phone: '☎', bell: '🔔',
+    lock: '🔒', unlock: '🔓', key: '🔑', shield: '🛡', 'shield-check': '🛡', eye: '👁', link: '🔗', 'external-link': '↗', layers: '☰',
+    list: '☰', 'list-checks': '☑', 'bar-chart': '📊', 'chart-bar': '📊', 'line-chart': '📈', 'chart-line': '📈', 'pie-chart': '◔',
+    'trending-up': '↗', 'trending-down': '↘', activity: '〰', gauge: '◔', calculator: '🧮', book: '📖', 'book-open': '📖',
+    'graduation-cap': '🎓', pencil: '✎', pen: '✎', edit: '✎', code: '⌨', terminal: '⌨', package: '📦', box: '📦', truck: '🚚',
+    'shopping-cart': '🛒', 'dollar-sign': '$', 'credit-card': '💳', coins: '🪙', gift: '🎁', trophy: '🏆', award: '🏅', medal: '🏅',
+    'thumbs-up': '👍', 'thumbs-down': '👎', smile: '☺', sun: '☀', moon: '☾', leaf: '🍃', droplet: '💧', thermometer: '🌡', 'git-branch': '⑂',
+    workflow: '⇢', network: '⛓', puzzle: '🧩', play: '▶', pause: '⏸', stop: '■', circle: '○', dot: '•', square: '□',
+  };
+  const iconChar = (name) => {
+    let k = String(name || '').toLowerCase().replace(/^(lucide-|icon-)/, '');
+    for (let i = 0; i < 3 && k; i++) {
+      if (ICONS[k]) return ICONS[k];
+      k = k.replace(/-(filled|fill|outline|solid|2|alt|circle|square|small|big)$/, '');
+    }
+    const head = Object.keys(ICONS).find((x) => k.startsWith(x + '-'));
+    return head ? ICONS[head] : '';
+  };
+  // Inline content (inside text, badges, rows' cells): its text on one line.
+  const uiInline = (n) => {
+    if (n.t === 'text') return n.v.replace(/\s*\n\s*/g, ' ');
+    const lo = n.name.toLowerCase(), a = parseAttrs(n.attrs);
+    const kids = () => n.kids.map(uiInline).join('');
+    if (lo === 'icon') { const c = iconChar(a.name || a.icon); return c ? `<span${uiAttrs('icon', a, false)}>${c}</span>` : ''; }
+    if (/^(text|title|heading|label|span|badge|tag|chip|pill)$/.test(lo)) {
+      const k = kids().trim();
+      if (!k || k.includes('\u0003')) return '';
+      const kind = /^(badge|tag|chip|pill)$/.test(lo) ? 'badge' : lo === 'title' || lo === 'heading' ? 'title' : 'text';
+      return `<span${uiAttrs(kind, a, false)}>${k}</span>`;
+    }
+    if (lo === 'link' || lo === 'a') { const h = a.href; return /^https?:/.test(h || '') ? `<a href="${escH(h)}">${kids().trim() || escH(host(h))}</a>` : kids(); }
+    if (lo === 'entity') return escH(a.value || a.name || a.label || '') || kids();
+    if (KEEP.has(lo) && !/^(table|thead|tbody|tr|th|td|details|summary|a)$/.test(lo)) return VOID.has(lo) ? `<${lo}>` : `<${lo}>${kids()}</${lo}>`;
+    if (DROP.test(lo) || lo === 'divider') return '';
+    return kids() || escH(typeof a.value === 'string' ? a.value : typeof a.label === 'string' ? a.label : '');
+  };
+  const uiText = (v) => v.replace(/^[ \t]+/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  const uiHtml = (n, root = false, ctx = {}) => {
+    if (n.t === 'text') { const t = uiText(n.v); return t ? `\n\n${t}\n\n` : ''; }
+    const lo = n.name.toLowerCase(), a = parseAttrs(n.attrs);
+    const inner = () => n.kids.map((k) => uiHtml(k, false, ctx)).join('');
+    const para = (html) => (html.trim() ? `\n\n${html.trim()}\n\n` : '');
+    const div = (kind, body, extra = '') => `\n\n<div${uiAttrs(kind, a, root, extra)}>\n\n${body.trim()}\n\n</div>\n\n`;
+    if (UI_ROW.test(lo)) {
+      const cells = n.kids.map((k) => {
+        const body = uiHtml(k, false, ctx).trim();
+        const grow = k.t === 'tag' && UI_BOX.test(k.name) ? ' data-grow="1"' : '';
+        return body && `<div data-ui="cell"${grow}>\n\n${body}\n\n</div>`;
+      }).filter(Boolean);
+      return div('row', cells.join('\n\n'));
+    }
+    if (lo === 'grid') return div('grid', inner());
+    if (UI_OPTS.test(lo)) {
+      const name = uiId(), type = /checkbox/.test(lo) ? 'checkbox' : 'radio';
+      const opts = n.kids.filter((k) => k.t === 'tag').map((k) => {
+        const label = (parseAttrs(k.attrs).label || k.kids.map(uiInline).join('')).trim();
+        return label ? `<label data-ui="opt"><input type="${type}" name="${name}"> ${label}</label>` : '';
+      }).filter(Boolean);
+      return opts.length ? div('options', opts.join('\n\n')) : '';
+    }
+    if (/^(radio|checkbox|option|choice)$/.test(lo)) {
+      const label = (a.label || n.kids.map(uiInline).join('')).trim();
+      return label ? para(`<label data-ui="opt"><input type="${lo === 'checkbox' ? 'checkbox' : 'radio'}" name="${uiId()}"> ${label}</label>`) : '';
+    }
+    if (UI_BOX.test(lo)) return div('box', inner());
+    if (/^(divider|separator|hr)$/.test(lo)) return `\n\n<div${uiAttrs('divider', a, false)}></div>\n\n`;
+    if (/^(list|ul|ol)$/.test(lo)) return '\n\n' + inner().trim() + '\n\n';
+    if (/^(list-item|li|step)$/.test(lo)) { const k = n.kids.map(uiInline).join('').trim(); return k ? `\n- ${k}\n` : ''; }
+    if (lo === 'img' && /^https?:/.test(a.src || '')) return para(`![${(a.alt || '').replace(/[[\]]/g, '')}](${a.src})`);
+    if (PICTURE.test(n.name)) return pictures(`${n.attrs} ${n.kids.map((k) => (k.t === 'text' ? k.v : '')).join('')}`, ctx, n.raw);
+    if (lo === 'writingblock') return '\n\n' + n.kids.map(uiInline).join('').trim().split('\n').map((l) => '> ' + l.trim()).join('\n') + '\n\n';
+    if (DROP.test(lo) && lo !== 'icon' && !(lo === 'button' && /^https?:/.test(a.href || ''))) return '';
+    return para(uiInline(n));
+  };
+
   // A picture component: the pictures when their addresses are in it, or when they were
   // found (ctx.found: what it shows → picture; ctx.imgs: the answer's pictures on the
   // page, in order), else a caption with what they show. ctx.want collects what it shows.
-  const pictures = (tag, ctx) => {
+  const pictures = (tag, ctx, raw = '') => {
     const urls = [...tag.matchAll(/https?:\/\/[^\s"'<>\]})]+/g)].map((m) => m[0]);
     if (urls.length) return '\n\n' + urls.slice(0, 8).map((u) => `![](${u})`).join('\n\n') + '\n\n';
     const words = [];
@@ -634,6 +800,18 @@ async function extract() {
       for (const q of m[2].matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'/g)) { const w = (q[1] ?? q[2]).trim(); if (w) words.push(w); }
     }
     const want = [...new Set(words)];
+    const alt = (w) => (w || '').replace(/[[\]\n]/g, ' ');
+    // What ChatGPT itself showed for this component (its pictures, and the pages they're from).
+    const flatTag = (x) => x.replace(/\s+/g, ' ').trim();
+    const g = ctx.gen && (ctx.gen.find((x) => !x.used && raw && flatTag(x.raw) === flatTag(raw)) ||
+      ctx.gen.find((x) => !x.used && x.raw && want.some((w) => x.raw.includes(w))) || ctx.gen.find((x) => !x.used && !x.raw));
+    if (g) {
+      g.used = true;
+      return '\n\n' + g.imgs.map((x, i) => {
+        const img = `![${alt(want[i] || want[0])}](${x.src})`;
+        return x.href ? `[${img}](${x.href})` : img;
+      }).join('\n\n') + '\n\n';
+    }
     ctx.want?.push(...want);
     const out = [], missing = [];
     for (const w of want.length ? want : ['']) {
@@ -664,8 +842,10 @@ async function extract() {
       noFence.push(keep(lines.slice(i, j + 1).map((l) => l.slice(Math.min(ind, l.match(/^[ \t]*/)[0].length))).join('\n')));
       i = j;
     }
+    // A drawing (inline <svg>) stays whole, on its own, for the reader to show as a picture.
     let s = noFence.join('\n')
-      .replace(/(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, (m) => (/\n\s*\n/.test(m) ? m : keep(m)))
+      .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, (m) => '\n\n' + keep(m.replace(/\s*\n\s*/g, ' ')) + '\n\n')
+      .replace(/(?<!\{\s*)(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, (m) => (/\n\s*\n/.test(m) ? m : keep(m))) // not a template string in an attribute={`…`}
       .replace(/\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)/g, (m) => (/<[A-Za-z/]/.test(m) ? m : keep(m)))
       .replace(/\$(?![\s$])[^$\n]+?\$/g, (m) => (/<[A-Za-z/]|\{[@#/:]/.test(m) ? m : keep(m)));
 
@@ -716,14 +896,18 @@ async function extract() {
       const kids = () => n.kids.map((k) => render(k, depth + 1)).join('');
       const N = n.name, lo = N.toLowerCase();
       if (lo === 'img' && attrOf(n.attrs, 'src')) return `![${(attrOf(n.attrs, 'alt') || '').replace(/[[\]]/g, '')}](${attrOf(n.attrs, 'src')})`;
-      if (PICTURE.test(N)) return pictures(`${n.attrs} ${plain(n)}`, ctx);
+      if (PICTURE.test(N)) return pictures(`${n.attrs} ${plain(n)}`, ctx, n.raw);
+      // A card, a row, a grid, a poll: drawn as it was (an island of HTML the reader keeps
+      // whole), unless it holds so much prose that it reads better as plain paragraphs.
+      if (ISLAND.test(lo) && !ctx.flat && plain(n).replace(/\u0001\d+\u0002/g, ' x ').trim().length < 2400) return '\n\n' + uiHtml(n, true, ctx) + '\n\n';
       if (lo === 'writingblock') return '\n\n' + kids().trim().split('\n').map((l) => '> ' + l.trim()).join('\n') + '\n\n';
       if (DROP.test(lo)) return '';
       if (lo === 'title' || lo === 'heading') return `\n\n**${kids().trim()}**\n\n`;
-      if (lo === 'badge' || lo === 'tag' || lo === 'chip') { const k = kids().trim(); return k ? ` \`${k}\` ` : ''; }
+      if (lo === 'badge' || lo === 'tag' || lo === 'chip') { const k = kids().trim(); return k && !k.includes('\u0003') ? ` \`${k}\` ` : ''; }
       if (ITEM.test(lo)) { const k = (attrOf(n.attrs, 'label') || kids()).trim(); return k ? `\n- ${k.replace(/\n+/g, ' ')}\n` : ''; }
       if (/^(divider|separator|hr)$/.test(lo)) return '\n\n';
       if (lo === 'link' && attrOf(n.attrs, 'href')) return `[${kids().trim()}](${attrOf(n.attrs, 'href')})`;
+      if (lo === 'entity' || (!n.kids.length && n.self && /^[A-Z]/.test(N) && attrOf(n.attrs, 'value'))) return attrOf(n.attrs, 'value') || attrOf(n.attrs, 'name') || '';
       if (KEEP.has(N)) return VOID.has(N) ? `<${N}>` : `<${N}${/[{}]/.test(n.attrs) ? '' : n.attrs}>${kids()}</${N}>`;
       if (UIBLOCK.test(lo)) return '\n\n' + kids() + '\n\n';
       const k = kids();
@@ -732,7 +916,7 @@ async function extract() {
     let out = root.kids.map((k) => render(k, 0)).join('');
     // 5. Code and formulas back.
     for (let n = 0; n < 3 && /\u0001\d+\u0002/.test(out); n++) out = out.replace(/\u0001(\d+)\u0002/g, (_, i) => kept[i]);
-    return out.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    return out.replace(/\u0003/g, '').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
   };
 
   // <name attr="…" attr={…}> at s[i], or null when it isn't a tag (a < in prose).
@@ -758,7 +942,7 @@ async function extract() {
         if (!known && !/^[a-z]{2,}$/.test(name)) return null;
         // No attributes and never closed: a word in angle brackets (Vec<T>), not a tag.
         if (!self && start === j - ws.length && !VOID.has(name) && !s.includes(`</${name}`, j)) return null;
-        return { t: 'tag', name, attrs: s.slice(start, j), self, end: j + (self ? 2 : 1) };
+        return { t: 'tag', name, attrs: s.slice(start, j), self, end: j + (self ? 2 : 1), raw: s.slice(i, j + (self ? 2 : 1)) };
       }
       if (!ws && j > start) return null;
       if (s[j] === '{') { const e = skipBalanced(s, j); if (e < 0) return null; j = e; continue; }
@@ -807,7 +991,7 @@ async function extract() {
   // strict: something unknown (what you'd click) drops the whole branch (throws NOPE).
   const runTemplate = (nodes, scope, strict) => {
     const out = [];
-    const val = (src) => { try { return { v: jsEval(src, scope) }; } catch { if (strict) throw NOPE; return null; } };
+    const val = (src) => { try { return { v: jsEval(src, scope) }; } catch (e) { if (strict) throw NOPE; return e === NOPE ? { nope: true } : null; } };
     for (const n of nodes) {
       if (n.t === 'text') out.push(n);
       else if (n.t === 'tag') {
@@ -828,7 +1012,8 @@ async function extract() {
         out.push({ ...n, attrs: a });
       } else if (n.t === 'expr') {
         const r = val(n.v);
-        if (r) out.push({ t: 'text', v: show(r.v) });
+        if (r?.nope) out.push({ t: 'text', v: '\u0003' });
+        else if (r) out.push({ t: 'text', v: show(r.v) });
         else if (!/[.([]/.test(n.v)) out.push({ t: 'text', v: `{${n.v}}` }); // braces in prose
       } else if (n.t === '@') {
         if (n.word === 'body' || n.word === 'const') runBody(n.word === 'const' ? 'const ' + n.v : n.v, scope);
@@ -882,16 +1067,69 @@ async function extract() {
     return out.length ? `<sup>${out.slice(0, 4).join(' ')}</sup>` : '';
   };
 
-  const gpt = /^(chatgpt\.com|chat\.openai\.com)$/.test(location.hostname) && location.pathname.match(/\/c\/([\w-]{20,})/);
+  // A shared ChatGPT link (/share/…) has no API to ask: the conversation is in the page
+  // itself, as React Router's "turbo-stream" (a flat list where objects and arrays hold
+  // the positions of their keys and values), in the page's <script> tags. Read from there
+  // (or from the page fetched again, if they're gone), decoded, and searched for the
+  // object that looks like a conversation.
+  const sharedConversation = async () => {
+    const pull = (html) => {
+      let out = '';
+      for (const m of html.matchAll(/streamController\.enqueue\(("(?:[^"\\]|\\.)*")\)/g)) { try { out += JSON.parse(m[1]); } catch { /* not a string */ } }
+      return out;
+    };
+    let raw = pull([...document.scripts].map((s) => s.textContent).join('\n'));
+    if (!raw) raw = pull(await (await fetch(location.href, { credentials: 'include' })).text());
+    const flat = JSON.parse(raw.split('\n')[0]);
+    const SPECIAL = { '-1': undefined, '-2': NaN, '-3': -Infinity, '-4': -0, '-5': null, '-6': Infinity, '-7': undefined };
+    const memo = new Map();
+    const at = (i) => {
+      if (i < 0) return SPECIAL[i];
+      if (memo.has(i)) return memo.get(i);
+      const v = flat[i];
+      if (v === null || typeof v !== 'object') { memo.set(i, v); return v; }
+      if (Array.isArray(v)) {
+        if (typeof v[0] === 'string') { const d = v[0] === 'D' ? new Date(v[1]) : null; memo.set(i, d); return d; } // dates, promises, maps…
+        const a = [];
+        memo.set(i, a);
+        for (const x of v) a.push(at(x));
+        return a;
+      }
+      const o = {};
+      memo.set(i, o);
+      for (const k in v) { const key = at(+k.slice(1)); if (typeof key === 'string' && !BAD.test(key)) o[key] = at(v[k]); }
+      return o;
+    };
+    const seen = new Set();
+    const find = (v, d) => {
+      if (!v || typeof v !== 'object' || d > 12 || seen.has(v)) return null;
+      seen.add(v);
+      if (v.mapping && typeof v.mapping === 'object' && v.current_node) return v;
+      for (const x of Object.values(v)) { const r = find(x, d + 1); if (r) return r; }
+      return null;
+    };
+    return find(at(0), 0);
+  };
+
+  const gpt = /^(chatgpt\.com|chat\.openai\.com)$/.test(location.hostname) && location.pathname.match(/\/(c|share)\/([\w-]{20,})/);
   let gptDbg = null;
   if (gpt) {
     try {
-      const sess = await (await fetch('/api/auth/session', { credentials: 'include' })).json();
+      const shared = gpt[1] === 'share';
+      let sess = null;
+      try { sess = await (await fetch('/api/auth/session', { credentials: 'include' })).json(); } catch { /* signed out: fine for a shared link */ }
       const auth = sess?.accessToken ? { Authorization: `Bearer ${sess.accessToken}` } : {};
       const api = (u) => fetch(u, { credentials: 'include', headers: auth });
-      const r = await api(`/backend-api/conversation/${gpt[1]}`);
-      if (!r.ok) throw new Error('api ' + r.status);
-      const j = await r.json();
+      let j;
+      if (shared) {
+        j = await sharedConversation();
+        if (!j) throw new Error('share: no conversation in the page');
+      } else {
+        const r = await api(`/backend-api/conversation/${gpt[2]}`);
+        if (!r.ok) throw new Error('api ' + r.status);
+        j = await r.json();
+      }
+      const conv = j.conversation_id || gpt[2];
       const chain = [];
       for (let id = j.current_node; id && j.mapping?.[id]; id = j.mapping[id].parent) chain.unshift(j.mapping[id].message);
       // ChatGPT marks citations, entities and image results in the text with private-use
@@ -913,8 +1151,14 @@ async function extract() {
       const unmark = (s, m) => {
         for (const r of m?.metadata?.content_references || []) {
           if (!r?.matched_text || !s.includes(r.matched_text)) continue;
+          // Some references point at ordinary text the page draws its own way: a code
+          // block (client_defined_widget), a suggested follow-up. That text stays as it is;
+          // only ChatGPT's private markers are replaced.
+          const marker = /[-【]/.test(r.matched_text);
+          if (!marker && (r.type === 'client_defined_widget' || /^```|^~~~/.test(r.matched_text))) continue;
           let md = '';
           try { md = refMd(r); } catch { /* an unfamiliar kind: drop the marker */ }
+          if (!md && !marker) continue;
           s = s.split(r.matched_text).join(md);
         }
         return s
@@ -1027,6 +1271,31 @@ async function extract() {
         docs.forEach((x) => walk(x, 0));
         return out;
       };
+      // The pictures ChatGPT found for an answer's picture components, as it keeps them
+      // with the message (metadata.genui_components: the component's own text, and the
+      // addresses it may show: each picture, often twice in two sizes, and the pages they
+      // come from). These are public addresses: shown as they are, each linked to its page.
+      const genOf = (m) => {
+        const src = (m?.content?.parts || []).filter((p) => typeof p === 'string').join('\n\n');
+        const isImg = (u) => /^https:\/\/images\.openai\.com\//.test(u) || /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u);
+        // Your own chats keep them elsewhere: model_dil_v2.appData.opGenui.componentResults,
+        // one result per component in the order they appear (no text to match, so in order).
+        const results = Object.values(m?.metadata?.model_dil_v2?.appData?.opGenui?.componentResults || {});
+        if (!(m?.metadata?.genui_components || []).length && results.length) {
+          return results.filter((r) => Array.isArray(r?.state?.images) && r.state.images.length).map((r) => ({
+            raw: '', used: false,
+            imgs: r.state.images.slice(0, 8).map((x) => ({ src: x.content_url || x.thumbnail_url || '', href: /^https?:/.test(x.url || '') ? x.url : '' }))
+              .filter((x) => /^https:\/\//.test(x.src)),
+          })).filter((g) => g.imgs.length);
+        }
+        return (m?.metadata?.genui_components || []).filter((g) => /image|photo|picture/i.test(g?.type || '')).map((g) => {
+          const urls = (g.safe_urls || []).map((u) => (typeof u === 'string' ? u : u?.url)).filter((u) => /^https:\/\//.test(u || ''));
+          const imgs = urls.filter(isImg), pages = urls.filter((u) => !isImg(u));
+          const big = imgs.filter((u) => /[?&]purpose=fullsize\b/.test(u));
+          const pick = [...new Set(big.length ? big : imgs)];
+          return { raw: src.slice(g.start_index ?? 0, g.end_index ?? 0), used: false, imgs: pick.slice(0, 8).map((u, i) => ({ src: u, href: pages[i] || '' })) };
+        }).filter((g) => g.imgs.length);
+      };
       const imagesOf = (m) => [
         ...(m?.content?.parts || []).filter((p) => p?.content_type === 'image_asset_pointer' && p.asset_pointer).map((p) => p.asset_pointer),
         ...(m?.metadata?.aggregate_result?.messages || []).filter((x) => x?.image_url).map((x) => x.image_url), // charts from code
@@ -1048,12 +1317,13 @@ async function extract() {
         } else if (role === 'assistant' && to === 'all') {
           if (m.metadata?.is_visually_hidden_from_conversation) continue;
           const raw = textOf(m);
-          // Pictures to look for: what the answer's picture components show (a dry run
-          // collects them, templates included); they're found after this loop.
+          // Pictures to look for: what the answer's picture components show and ChatGPT
+          // didn't keep with the message (a dry run collects them, templates included);
+          // they're found after this loop.
           const want = [];
-          if (/<\w*(Image|Photo|Picture)|<img\b/i.test(raw)) uiToMd(raw, { want });
-          if (want.length) { const a = turns[turn()].answers; a.push(''); looks.push({ list: a, at: a.length - 1, raw, id: m.id, want: [...new Set(want)] }); }
-          else { const t = uiToMd(raw); if (t) turns[turn()].answers.push(t); }
+          if (/<\w*(Image|Photo|Picture)|<img\b/i.test(raw)) uiToMd(raw, { want, gen: genOf(m) });
+          if (want.length) { const a = turns[turn()].answers; a.push(''); looks.push({ list: a, at: a.length - 1, raw, id: m.id, want: [...new Set(want)], gen: () => genOf(m) }); }
+          else { const t = uiToMd(raw, { gen: genOf(m) }); if (t) turns[turn()].answers.push(t); }
         } else if (role === 'assistant' && /^canmore\.create_textdoc$/.test(to)) {
           const c = json(m.content?.text || m.content?.parts?.[0] || '');
           if (!c) continue;
@@ -1074,7 +1344,8 @@ async function extract() {
       }
       // The canvases as ChatGPT keeps them now (covers edits made by hand in the canvas).
       try {
-        const td = await Promise.race([api(`/backend-api/conversation/${gpt[1]}/textdocs`).then((x) => (x.ok ? x.json() : null)), new Promise((res) => setTimeout(() => res(null), 3000))]);
+        if (shared) throw new Error('a shared link: the replayed versions');
+        const td = await Promise.race([api(`/backend-api/conversation/${conv}/textdocs`).then((x) => (x.ok ? x.json() : null)), new Promise((res) => setTimeout(() => res(null), 3000))]);
         for (const d of Array.isArray(td) ? td : td?.textdocs || []) {
           if (typeof d?.content !== 'string') continue;
           const mine = docs.find((x) => x.id && x.id === d.id) || docs.find((x) => !x.id && x.title === d.title);
@@ -1084,7 +1355,6 @@ async function extract() {
         }
       } catch { /* the replayed versions will do */ }
       // Images: fetched here (they need your sign-in) and passed on as data, within a few seconds.
-      const conv = gpt[1];
       const fetchImg = async (ptr) => {
         const id = String(ptr).replace(/^[\w-]+:\/\//, '');
         const urls = [`/backend-api/files/download/${id}?conversation_id=${conv}&inline=false`, `/backend-api/files/${id}/download`];
@@ -1104,7 +1374,7 @@ async function extract() {
         return null;
       };
       await findPictures(looks, api);
-      for (const l of looks) l.list[l.at] = uiToMd(l.raw, { imgs: l.imgs, found: l.found });
+      for (const l of looks) l.list[l.at] = uiToMd(l.raw, { imgs: l.imgs, found: l.found, gen: l.gen() });
       for (const t of turns) t.answers = t.answers.filter(Boolean);
       const got = await Promise.all(pending.slice(0, 24).map(([, , p]) => Promise.race([fetchImg(p), new Promise((res) => setTimeout(() => res(null), 5000))])));
       pending.slice(0, 24).forEach(([t, where, p], i) => {
@@ -1113,7 +1383,7 @@ async function extract() {
         else turns[t].answers.push(src ? '![Image](' + src + ')' : '*An image ChatGPT made (couldn’t be fetched).*');
       });
       placeArtifacts(turns, docs, 'Canvas');
-      gptDbg = { api: turns.length, canvas: docs.length, images: got.filter(Boolean).length + '/' + pending.length };
+      gptDbg = { api: turns.length, canvas: docs.length, images: got.filter(Boolean).length + '/' + pending.length, ...(shared ? { shared: true } : {}) };
       if (turns.length) {
         const content = chatDoc('ChatGPT', j.title || 'ChatGPT conversation', turns);
         return { kind: 'markdown', chat: 'ChatGPT', title: j.title || title(), url: location.href, content, text: content.length, dbg: gptDbg };

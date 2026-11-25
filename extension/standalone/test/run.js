@@ -65,7 +65,7 @@ function sites(tls) {
     if (!hit) { res.writeHead(404).end('not found'); return; }
     const body = typeof hit.body === 'function' ? hit.body(u) : hit.body;
     if (body?.__status) { res.writeHead(body.__status).end(); return; }
-    if (Buffer.isBuffer(body)) { res.writeHead(200, { 'content-type': 'image/png', 'cross-origin-resource-policy': 'same-origin' }).end(body); return; }
+    if (Buffer.isBuffer(body)) { res.writeHead(200, { 'content-type': 'image/png', 'cross-origin-resource-policy': s.corp || 'same-origin' }).end(body); return; }
     const json = typeof body !== 'string';
     res.writeHead(200, { 'content-type': json ? 'application/json' : 'text/html; charset=utf-8', ...(json ? {} : s.headers) });
     res.end(json ? JSON.stringify(body) : body);

@@ -439,7 +439,7 @@
     if (page.chat) {
       const d = page.dbg || {};
       const how = typeof d.api === 'number' && page.kind === 'markdown'
-        ? `Read from ${page.chat}'s own API${d.images && d.images !== '0/0' ? ` · images ${d.images.replace('/', ' of ')}` : ''}`
+        ? `Read from ${d.shared ? 'the shared link' : `${page.chat}'s own API`}${d.images && d.images !== '0/0' ? ` · images ${d.images.replace('/', ' of ')}` : ''}`
         : `Read from the page${d.dom ? ` (${d.dom} messages)` : ''}${typeof d.api === 'string' ? `; the API answered “${d.api}”` : ''}`;
       if (ext === 'md') body += `\n\n---\n\n*${how}.*\n`;
       else if (ext === 'html') body = body.replace('</article>', `<hr><p><em>${esc(how)}.</em></p></article>`);

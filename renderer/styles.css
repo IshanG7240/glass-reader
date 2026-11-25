@@ -345,6 +345,108 @@ body.dark img.ink { filter: invert(0.9) hue-rotate(180deg); }
 .doc tr:last-child td { border-bottom: 0; }
 .doc .chapter { break-before: column; }
 
+/* ---------- A chat's own UI: cards, rows, grids, badges, quizzes (block type "ui") ----------
+   Drawn in the theme's colours; the chat's own colours (--bg, --bd, --fc) come through as tints. */
+.gr-ui {
+  --t-secondary: var(--fg-dim); --t-tertiary: var(--fg-faint);
+  --t-success: #1f9d5c; --t-danger: #d63c44; --t-warning: #b7791f; --t-info: #2f6fd6; --t-discovery: #7c4ddb;
+  font-family: var(--ui); font-size: 0.8em; line-height: 1.45; text-align: left; hyphens: none; color: var(--fg);
+  display: flex; flex-direction: column; gap: var(--gap, 0.6em);
+}
+body.dark .gr-ui { --t-success: #5fd395; --t-danger: #ff7c83; --t-warning: #f3b54a; --t-info: #84b6ff; --t-discovery: #b597ff; }
+.doc .ui { margin: 0 0 1.3em; break-inside: avoid; }
+.gr-ui .gr-ui { font-size: 1em; }
+/* Each element's own values (its inline style wins over this); none are passed down. */
+.gr-ui [data-ui] { --bg: initial; --bd: initial; --fc: initial; --w: initial; --h: initial; --pad: initial; --gap: initial; --r: initial; --cols: initial; }
+.gr-ui p { margin: 0; }
+.gr-ui strong, .gr-ui b { color: var(--fg-strong); font-weight: 600; }
+.gr-ui a { color: var(--accent); }
+.gr-ui ul, .gr-ui ol { margin: 0; padding-left: 1.3em; }
+.gr-ui li + li { margin-top: 0.2em; }
+.gr-ui img { display: block; max-width: 100%; max-height: 50vh; border-radius: 10px; margin: 0 auto; }
+.gr-ui pre { font-family: var(--mono); font-size: 0.88em; white-space: pre-wrap; margin: 0; padding: 0.7em 0.9em; border-radius: 10px; background: color-mix(in srgb, var(--code-tint) 9%, var(--panel)); }
+.gr-ui blockquote { margin: 0; padding-left: 0.8em; border-left: 2px solid var(--panel-line); }
+.gr-ui [data-tone] { --tone: var(--fg); }
+.gr-ui [data-tone="secondary"], .gr-ui [data-tone="muted"] { --tone: var(--t-secondary); }
+.gr-ui [data-tone="tertiary"], .gr-ui [data-tone="subtle"] { --tone: var(--t-tertiary); }
+.gr-ui [data-tone="success"], .gr-ui [data-tone="positive"] { --tone: var(--t-success); }
+.gr-ui [data-tone="danger"], .gr-ui [data-tone="error"], .gr-ui [data-tone="critical"], .gr-ui [data-tone="negative"] { --tone: var(--t-danger); }
+.gr-ui [data-tone="warning"], .gr-ui [data-tone="caution"] { --tone: var(--t-warning); }
+.gr-ui [data-tone="info"], .gr-ui [data-tone="accent"], .gr-ui [data-tone="primary"] { --tone: var(--t-info); }
+.gr-ui [data-tone="discovery"] { --tone: var(--t-discovery); }
+.gr-ui [data-ui="text"][data-tone], .gr-ui [data-ui="icon"][data-tone] { color: var(--tone); }
+.gr-ui [data-ui="text"][style*="--fc"], .gr-ui [data-ui="icon"][style*="--fc"], .gr-ui [data-ui="badge"][style*="--fc"] { color: var(--fc); --tone: var(--fc); }
+.gr-ui [data-size="xs"] { font-size: 0.84em; }
+.gr-ui [data-size="sm"] { font-size: 0.92em; }
+.gr-ui [data-size="lg"] { font-size: 1.12em; }
+.gr-ui [data-size="xl"] { font-size: 1.25em; }
+.gr-ui [data-weight="medium"] { font-weight: 500; }
+.gr-ui [data-weight="semibold"], .gr-ui [data-weight="bold"] { font-weight: 650; color: var(--fg-strong); }
+.gr-ui [data-nums] { font-variant-numeric: tabular-nums; }
+.gr-ui [data-ui="title"] { display: block; font-size: 1.12em; font-weight: 650; color: var(--fg-strong); }
+.gr-ui [data-ui="title"][data-size="lg"] { font-size: 1.25em; }
+.gr-ui [data-ui="icon"] { display: inline-block; line-height: 1; font-size: 1.15em; }
+.gr-ui [data-ui="icon"][data-size="lg"] { font-size: 1.5em; }
+.gr-ui [data-ui="icon"][data-size="xl"] { font-size: 1.8em; }
+.gr-ui [data-ui="badge"] {
+  display: inline-block; padding: 0.15em 0.6em; border-radius: 999px; font-size: 0.82em; font-weight: 600; white-space: nowrap;
+  color: var(--tone, var(--fg-dim)); background: color-mix(in srgb, var(--tone, var(--fg)) 14%, transparent);
+}
+.gr-ui[data-ui="box"], .gr-ui [data-ui="box"] {
+  display: flex; flex-direction: column; gap: var(--gap, 0.5em); padding: var(--pad, 0); border-radius: var(--r, 0);
+  background: var(--bg, transparent); width: var(--w, auto); height: var(--h, auto); min-width: 0; box-sizing: border-box;
+}
+.gr-ui[data-border], .gr-ui [data-border] { border: 1px solid var(--bd, var(--panel-line)); }
+.gr-ui [data-bg="surface"], .gr-ui [data-bg="surface-secondary"], .gr-ui [data-bg="secondary"] { background: var(--panel); }
+.gr-ui [data-bg="surface-tertiary"], .gr-ui [data-bg="tertiary"] { background: color-mix(in srgb, var(--fg) 12%, transparent); }
+.gr-ui [data-bg="success"] { background: color-mix(in srgb, var(--t-success) 14%, transparent); }
+.gr-ui [data-bg="danger"] { background: color-mix(in srgb, var(--t-danger) 14%, transparent); }
+.gr-ui [data-bg="warning"] { background: color-mix(in srgb, var(--t-warning) 14%, transparent); }
+.gr-ui [data-bg="info"] { background: color-mix(in srgb, var(--t-info) 14%, transparent); }
+.gr-ui[data-clip], .gr-ui [data-clip] { overflow: hidden; }
+.gr-ui[data-align="center"], .gr-ui [data-ui="box"][data-align="center"] { align-items: center; text-align: center; }
+.gr-ui[data-ui="row"], .gr-ui [data-ui="row"] {
+  display: flex; flex-flow: row wrap; gap: var(--gap, 0.45em 0.7em); align-items: flex-start;
+}
+.gr-ui [data-ui="row"][data-align="center"], .gr-ui[data-ui="row"][data-align="center"] { align-items: center; }
+.gr-ui [data-ui="row"][data-align="end"] { align-items: flex-end; }
+.gr-ui [data-ui="row"][data-justify="between"], .gr-ui[data-ui="row"][data-justify="between"] { justify-content: space-between; }
+.gr-ui [data-ui="row"][data-justify="center"] { justify-content: center; }
+.gr-ui [data-ui="row"][data-justify="end"] { justify-content: flex-end; }
+.gr-ui [data-ui="row"][data-justify="around"] { justify-content: space-around; }
+.gr-ui [data-ui="cell"] { min-width: 0; display: flex; flex-direction: column; gap: 0.4em; }
+.gr-ui [data-ui="cell"][data-grow] { flex: 1 1 11em; }
+.gr-ui[data-ui="grid"], .gr-ui [data-ui="grid"] {
+  display: grid; gap: var(--gap, 0.6em);
+  grid-template-columns: repeat(auto-fit, minmax(max(9.5em, calc((100% - (var(--cols, 2) - 1) * 0.8em) / var(--cols, 2))), 1fr));
+}
+.gr-ui [data-ui="divider"] { align-self: stretch; height: 1px; background: var(--panel-line); flex: none; }
+/* Polls and quizzes: options to tap; a quiz shows right or wrong, and why, once one is picked. */
+.gr-ui[data-ui="quiz"], .gr-ui [data-ui="quiz"] { display: flex; flex-direction: column; gap: 1.3em; }
+.gr-ui [data-ui="grid"] > [data-ui="box"] > [data-ui="box"]:only-child { flex: 1; }
+.gr-ui [data-ui="q"], .gr-ui [data-ui="options"] { display: flex; flex-direction: column; gap: 0.45em; }
+.gr-ui [data-ui="opt"] {
+  display: flex; align-items: center; gap: 0.6em; padding: 0.5em 0.8em; cursor: pointer;
+  border: 1px solid var(--panel-line); border-radius: 10px; background: var(--panel);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.gr-ui [data-ui="opt"] b { color: var(--fg-dim); font-weight: 600; }
+.gr-ui [data-ui="opt"] input { margin: 0; accent-color: var(--accent); flex: none; }
+.gr-ui [data-ui="opt"]:has(input:checked) { border-color: var(--accent); }
+.gr-ui [data-ui="q"]:has(input:checked) [data-ui="opt"][data-ok] {
+  border-color: var(--t-success); background: color-mix(in srgb, var(--t-success) 14%, transparent);
+}
+.gr-ui [data-ui="q"] [data-ui="opt"]:not([data-ok]):has(input:checked) {
+  border-color: var(--t-danger); background: color-mix(in srgb, var(--t-danger) 12%, transparent);
+}
+.gr-ui [data-ui="why"] { position: relative; padding: 0.55em 0.8em; border-radius: 10px; background: var(--panel); }
+.gr-ui [data-ui="why"] > * { visibility: hidden; }
+.gr-ui [data-ui="why"]::after { content: "Pick an answer to see if it's right."; position: absolute; left: 0.8em; top: 0.55em; color: var(--fg-faint); }
+.gr-ui [data-ui="q"]:has(input:checked) [data-ui="why"] > * { visibility: visible; }
+.gr-ui [data-ui="q"]:has(input:checked) [data-ui="why"]::after { content: none; }
+.chunk .gr-ui { font-size: 0.6em; }
+.cine-card .gr-ui { font-size: 0.42em; max-height: 70vh; overflow-y: auto; }
+
 /* Formulas (KaTeX, in the text's own colour). Wide ones scroll rather than overflow. */
 .katex { font-size: 1.12em; text-rendering: auto; }
 .gr-math.display { display: block; overflow-x: auto; overflow-y: hidden; }
