@@ -89,8 +89,11 @@ class ChatReader(
             screens++
             progress("· $screens")
             if (!can(list, AccessibilityAction.ACTION_SCROLL_FORWARD)) { Log.w(TAG, "read: no forward action at screen $screens: ${list.actionList.map { it.id }}"); break }
+            val before = rows(list)
+            val ts = SystemClock.uptimeMillis()
             if (!list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) { Log.w(TAG, "read: forward refused at screen $screens"); break }
-            settle(list)
+            settle(list, before)
+            Log.w(TAG, "time: settle ${SystemClock.uptimeMillis() - ts} ms")
         }
         Log.w(TAG, "read: $screens screens, ${items.size} items, ${SystemClock.uptimeMillis() - t0} ms")
         if (items.isEmpty()) return null
@@ -111,8 +114,44 @@ class ChatReader(
         return root?.let { findList(it) }
     }
 
-    /** Wait until the screen stops moving after a scroll. */
-    private fun settle(list: AccessibilityNodeInfo) {
+    /**
+     * Wait until the screen stops moving after a scroll: first for it to start (the apps
+     * animate, a frame or two later), then for two looks in a row to match. The looks are
+     * cheap ones, at where the first few pieces of text sit, so the wait ends soon after the
+     * scroll does. [before] is how they sat before the scroll.
+     */
+    private fun settle(list: AccessibilityNodeInfo, before: String? = null) {
+        val t = SystemClock.uptimeMillis()
+        var last = rows(list) ?: return settleSlow(list)
+        if (before != null) {
+            while (last == before && SystemClock.uptimeMillis() - t < 450) { SystemClock.sleep(25); last = rows(list) ?: return settleSlow(list) }
+        }
+        var same = 0
+        while (SystemClock.uptimeMillis() - t < 1500) {
+            SystemClock.sleep(35)
+            val now = rows(list) ?: return settleSlow(list)
+            if (now == last) { if (++same >= 2) return } else { same = 0; last = now }
+        }
+    }
+
+    /** Where the first few pieces of text in the list sit on screen; null when there is none to go by. */
+    private fun rows(list: AccessibilityNodeInfo): String? {
+        val sb = StringBuilder()
+        val r = Rect()
+        var n = 0
+        fun walk(x: AccessibilityNodeInfo?, d: Int) {
+            x ?: return
+            if (n >= 8 || d > 60) return
+            if (!x.text.isNullOrEmpty()) { x.getBoundsInScreen(r); sb.append(r.top).append(':').append(x.text!!.length).append(';'); n++ }
+            for (i in 0 until x.childCount) { if (n >= 8) return; walk(x.getChild(i), d + 1) }
+        }
+        fresh()
+        if (!list.refresh()) return null
+        walk(list, 0)
+        return if (n >= 1) sb.toString() else null
+    }
+
+    private fun settleSlow(list: AccessibilityNodeInfo) {
         var last = ""
         val until = SystemClock.uptimeMillis() + 1500
         SystemClock.sleep(120)
@@ -219,9 +258,11 @@ class ChatReader(
                 for (i in 0 until n.childCount) walk(n.getChild(i), d + 1, b, t, h, path)
             }
         }
+        val tw = SystemClock.uptimeMillis()
         fresh()
         list.refresh()
         walk(list, 0, false, false, false, "")
+        Log.w(TAG, "time: snapshot walk ${SystemClock.uptimeMillis() - tw} ms")
 
         // Reading order on screen: rows top to bottom (things within a few pixels share a
         // row, such as a list number and its text, or a table's cells), left to right.

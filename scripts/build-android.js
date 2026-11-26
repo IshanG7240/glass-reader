@@ -39,11 +39,27 @@ console.log(`→ ${path.relative(process.cwd(), out)} (${(fs.statSync(out).size 
 if (process.argv.includes('--install')) {
   const adb = env.ANDROID_HOME ? path.join(env.ANDROID_HOME, 'platform-tools/adb') : 'adb';
   execFileSync(adb, ['install', '-r', out], { stdio: 'inherit' });
-  // Reinstalling turns the accessibility service off; turn it back on, keeping any other
-  // accessibility services that are on.
+  // The quiet way (android/.../Quiet.kt): the Read button as an ordinary overlay, and the
+  // accessibility service on only while a chat is read, so payment apps keep working.
+  // These three can only be given from a computer.
+  const sh = (...a) => execFileSync(adb, ['shell', ...a], { stdio: 'inherit' });
   const ours = 'dev.glassreader/.CaptureService';
   const now = execFileSync(adb, ['shell', 'settings', 'get', 'secure', 'enabled_accessibility_services']).toString().trim();
-  const list = now && now !== 'null' ? now.split(':').filter((s) => s && s !== ours) : [];
-  execFileSync(adb, ['shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', [...list, ours].join(':')], { stdio: 'inherit' });
-  console.log('Installed; reading from the screen is on.');
+  const list = now && now !== 'null' ? now.split(':').filter((s) => s && s !== ours && s !== 'dev.glassreader/dev.glassreader.CaptureService') : [];
+  const put = (l) => (l.length
+    ? sh('settings', 'put', 'secure', 'enabled_accessibility_services', l.join(':'))
+    : sh('settings', 'delete', 'secure', 'enabled_accessibility_services'));
+  try {
+    sh('pm', 'grant', 'dev.glassreader', 'android.permission.WRITE_SECURE_SETTINGS');
+    sh('appops', 'set', 'dev.glassreader', 'SYSTEM_ALERT_WINDOW', 'allow');
+    sh('appops', 'set', 'dev.glassreader', 'GET_USAGE_STATS', 'allow');
+    put(list); // the service stays off until a chat is read
+    sh('am', 'start', '-n', 'dev.glassreader/.ReaderActivity'); // opening the app starts the button
+    console.log('Installed; the Read button is on, and Accessibility only while a chat is read.');
+  } catch (e) {
+    // Reinstalling turns the accessibility service off; turn it back on, keeping any other
+    // accessibility services that are on.
+    put([...list, ours]);
+    console.log('Installed; reading from the screen is on (the quiet way could not be set up).');
+  }
 }

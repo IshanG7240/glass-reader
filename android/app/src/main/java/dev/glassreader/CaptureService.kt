@@ -46,7 +46,9 @@ class CaptureService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private lateinit var worker: Handler
     private lateinit var wm: WindowManager
-    private var button: View? = null
+    private lateinit var button: ReadButton
+    /** Turned on just to read one chat (see [Quiet]); turns itself off when that is done. */
+    private var oneShot = false
     private var scrim: View? = null
     private var scrimText: TextView? = null
     private var current: String? = null
@@ -59,11 +61,20 @@ class CaptureService : AccessibilityService() {
         worker = Handler(HandlerThread("capture").apply { start() }.looper)
         // The notification's "Show" (only this app can send it).
         registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) = unhide()
+            override fun onReceive(c: Context, i: Intent) = button.unhide()
         }, IntentFilter(Notify.ACTION_SHOW), RECEIVER_NOT_EXPORTED)
-        val left = hiddenUntil - System.currentTimeMillis()
-        if (left > 0) main.postDelayed(showAgain, left) else Notify.cancel(this)
-        update()
+        button = ReadButton(this, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY) { current?.let { read(it) } }
+        if (button.hiddenUntil <= System.currentTimeMillis()) Notify.cancel(this)
+        instance = this
+        oneShot = Quiet.take(this)
+        Log.w(TAG, "quiet: connected oneShot=$oneShot")
+        when {
+            oneShot -> main.postDelayed({ readFront(0) }, 150)
+            // Left on from before the quiet way was set up: payment apps refuse to work
+            // while any service like this one is on, so it steps aside.
+            Quiet.ready(this) -> { retire(); return }
+            else -> update()
+        }
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             // adb shell am broadcast -a dev.glassreader.DUMP  → the chat's node tree in logcat
             debugReceiver = object : BroadcastReceiver() {
@@ -94,9 +105,12 @@ class CaptureService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
-        hideButton(); hideScrim()
-        main.removeCallbacks(showAgain)
-        worker.looper.quitSafely()
+        if (instance === this) instance = null
+        Quiet.still(this, false)
+        if (::button.isInitialized) button.destroy()
+        hideScrim()
+        main.removeCallbacksAndMessages(null)
+        if (::worker.isInitialized) worker.looper.quitSafely()
         super.onDestroy()
     }
 
@@ -121,157 +135,36 @@ class CaptureService : AccessibilityService() {
     } catch (_: Exception) { null }
 
     private fun update() {
-        if (busy) return
+        if (busy || oneShot) return
         val pkg = frontApp()
         if (pkg == packageName) return // our own reader in front: leave the button as it was
         current = pkg?.takeIf { it in APPS }
-        if (current != null && System.currentTimeMillis() >= hiddenUntil) showButton() else hideButton()
+        button.set(current != null)
     }
 
-    // ---------- the Read button ----------
+    /** One read of the chat in front, asked for by [ButtonService]; then the service turns itself off. */
+    private fun readFront(tries: Int) {
+        val pkg = frontApp()?.takeIf { it in APPS }
+        when {
+            pkg != null -> { Log.w(TAG, "quiet: front found, try $tries"); read(pkg) }
+            tries < 5 -> main.postDelayed({ readFront(tries + 1) }, 200)
+            else -> {
+                startActivity(ReaderActivity.intent(this, ReaderActivity.ACTION_CAPTURE_ERROR)
+                    .putExtra(ReaderActivity.EXTRA_MESSAGE, "No chat found on screen. Open a conversation and tap Read again."))
+                retire()
+            }
+        }
+    }
+
+    /** Off again, so nothing is left running in Accessibility. */
+    fun retire() {
+        oneShot = true // no button from here on
+        if (::button.isInitialized) button.set(false)
+        if (instance === this) instance = null
+        main.postDelayed({ runCatching { disableSelf() } }, 300)
+    }
 
     private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics).toInt()
-
-    private val prefs by lazy { getSharedPreferences("ui", MODE_PRIVATE) }
-
-    /** Dragged onto the ✕: the button stays away until this time (or the notification is tapped). */
-    private val hiddenUntil get() = prefs.getLong("hiddenUntil", 0L)
-    private val showAgain = Runnable { unhide() }
-
-    private fun showButton() {
-        if (button != null) return
-        val size = dp(46f)
-        val b = android.widget.ImageView(this).apply {
-            setImageResource(R.drawable.ic_read)
-            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-            setPadding(dp(11f), dp(11f), dp(9f), dp(11f))
-            background = GradientDrawable().apply {
-                cornerRadii = floatArrayOf(size / 2f, size / 2f, 0f, 0f, 0f, 0f, size / 2f, size / 2f)
-                setColor(Color.argb(215, 22, 24, 34))
-                setStroke(dp(1f), Color.argb(60, 255, 255, 255))
-            }
-            elevation = dp(6f).toFloat()
-            contentDescription = "Read this chat in Glass Reader"
-        }
-        val lp = WindowManager.LayoutParams(
-            size, size,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.END or Gravity.TOP
-            x = 0
-            y = prefs.getInt("y", resources.displayMetrics.heightPixels * 2 / 5)
-        }
-        // A tap reads. Dragging moves it up and down the edge; dragging it onto the ✕ that
-        // appears at the bottom hides it for 10 minutes.
-        var downX = 0f; var downY = 0f; var startY = 0; var moved = false; var over = false
-        b.setOnTouchListener { v, ev ->
-            val dm = resources.displayMetrics
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { downX = ev.rawX; downY = ev.rawY; startY = lp.y; moved = false; over = false; v.alpha = 0.75f }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = ev.rawX - downX; val dy = ev.rawY - downY
-                    if (!moved && (abs(dx) > dp(8f) || abs(dy) > dp(8f))) { moved = true; showDismiss() }
-                    if (moved) {
-                        lp.y = (startY + dy.toInt()).coerceIn(dp(40f), dm.heightPixels - size)
-                        lp.x = (-dx).toInt().coerceIn(0, dm.widthPixels - size)
-                        over = overDismiss(ev.rawX, ev.rawY)
-                        dismissTarget?.let { t -> t.scaleX = if (over) 1.25f else 1f; t.scaleY = t.scaleX; t.alpha = if (over) 1f else 0.85f }
-                        runCatching { wm.updateViewLayout(v, lp) }
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.alpha = 1f
-                    hideDismiss()
-                    when {
-                        moved && over && ev.actionMasked == MotionEvent.ACTION_UP -> {
-                            lp.x = 0; lp.y = startY
-                            hideFor(10 * 60_000L)
-                        }
-                        moved -> {
-                            lp.x = 0
-                            runCatching { wm.updateViewLayout(v, lp) }
-                            prefs.edit().putInt("y", lp.y).apply()
-                        }
-                        ev.actionMasked == MotionEvent.ACTION_UP -> current?.let { read(it) }
-                    }
-                }
-            }
-            true
-        }
-        runCatching { wm.addView(b, lp); button = b }
-    }
-
-    private fun hideButton() {
-        button?.let { runCatching { wm.removeView(it) } }
-        button = null
-        hideDismiss()
-    }
-
-    // ---------- hiding the button for a while ----------
-
-    private var dismissTarget: View? = null
-
-    private fun dismissCenter(): Pair<Float, Float> {
-        val dm = resources.displayMetrics
-        return dm.widthPixels / 2f to dm.heightPixels - dp(110f).toFloat()
-    }
-
-    private fun overDismiss(x: Float, y: Float): Boolean {
-        val (cx, cy) = dismissCenter()
-        return kotlin.math.hypot(x - cx, y - cy) < dp(70f)
-    }
-
-    private fun showDismiss() {
-        if (dismissTarget != null) return
-        val size = dp(58f)
-        val t = TextView(this).apply {
-            text = "✕"
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            textSize = 20f
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.argb(200, 22, 24, 34))
-                setStroke(dp(1.5f), Color.argb(110, 255, 255, 255))
-            }
-            alpha = 0.85f
-        }
-        val (_, cy) = dismissCenter()
-        val lp = WindowManager.LayoutParams(
-            size, size,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (cy - size / 2f).toInt()
-        }
-        runCatching { wm.addView(t, lp); dismissTarget = t }
-    }
-
-    private fun hideDismiss() {
-        dismissTarget?.let { runCatching { wm.removeView(it) } }
-        dismissTarget = null
-    }
-
-    private fun hideFor(ms: Long) {
-        prefs.edit().putLong("hiddenUntil", System.currentTimeMillis() + ms).apply()
-        hideButton()
-        main.removeCallbacks(showAgain)
-        main.postDelayed(showAgain, ms)
-        if (!Notify.hidden(this, ms)) {
-            android.widget.Toast.makeText(this, "Read button hidden for 10 minutes", android.widget.Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun unhide() {
-        main.removeCallbacks(showAgain)
-        prefs.edit().remove("hiddenUntil").apply()
-        Notify.cancel(this)
-        update()
-    }
 
     /** Covers the chat while it scrolls by itself, so it doesn't flicker past you. Tap to stop. */
     private fun showScrim(app: String) {
@@ -313,17 +206,20 @@ class CaptureService : AccessibilityService() {
         busy = true
         cancelled = false
         val app = APPS.getValue(pkg)
-        hideButton()
+        button.set(false)
         // A picture of the chat first: the reader's Glass background is this screen, blurred.
         screenshot { shot ->
+            Log.w(TAG, "read: screenshot done")
             shot?.let { saveWall(it) }
             showScrim(app)
             worker.post {
+                Quiet.still(this, true)
                 val result = runCatching {
                     ChatReader(this, pkg, app, ::appRoot, { cancelled }) { n ->
                         main.post { scrimText?.text = "Reading the $app chat… $n".trimEnd() }
                     }.read()
                 }
+                Quiet.still(this, false)
                 main.post {
                     hideScrim()
                     busy = false
@@ -344,7 +240,7 @@ class CaptureService : AccessibilityService() {
                                 .putExtra(ReaderActivity.EXTRA_MESSAGE, "Couldn’t read the chat: ${e.message}"))
                         },
                     )
-                    update()
+                    if (oneShot) retire() else update()
                 }
             }
         }
@@ -374,6 +270,8 @@ class CaptureService : AccessibilityService() {
 
     companion object {
         const val TAG = "GlassReader"
+        /** The connected service, if it is on right now. */
+        @Volatile var instance: CaptureService? = null
         val APPS = mapOf(
             "com.openai.chatgpt" to "ChatGPT",
             "com.anthropic.claude" to "Claude",

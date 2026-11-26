@@ -101,10 +101,11 @@ class ReaderActivity : Activity() {
     override fun onResume() {
         super.onResume()
         immersive()
+        Quiet.sync(this)
         // With reading from the screen on, ask once for notifications: the Read button can
         // be dragged away, and the notification is how it comes back early.
         val asked = getSharedPreferences("ui", MODE_PRIVATE)
-        if (android.os.Build.VERSION.SDK_INT >= 33 && !Notify.allowed(this) && CaptureService.isEnabled(this) && !asked.getBoolean("askedNotify", false)) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && !Notify.allowed(this) && (CaptureService.isEnabled(this) || Quiet.ready(this)) && !asked.getBoolean("askedNotify", false)) {
             asked.edit().putBoolean("askedNotify", true).apply()
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
         }
@@ -271,7 +272,7 @@ class ReaderActivity : Activity() {
         @JavascriptInterface fun docOpen(open: Boolean) { hasDoc = open }
         @JavascriptInterface fun hasWall(): Boolean = File(filesDir, "wall.jpg").isFile
         @JavascriptInterface fun status(): String =
-            JSONObject().put("screen", CaptureService.isEnabled(this@ReaderActivity)).toString()
+            JSONObject().put("screen", CaptureService.isEnabled(this@ReaderActivity)).put("quiet", Quiet.ready(this@ReaderActivity)).toString()
         @JavascriptInterface fun openAccessibilitySettings() = runOnUiThread {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
