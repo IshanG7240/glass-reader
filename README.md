@@ -39,19 +39,24 @@ Get it from the [latest release](https://github.com/IshanG7240/glass-reader/rele
 
 Tap or move the mouse to bring up the control bar. With a keyboard:
 
-| Key | Does |
-| --- | --- |
-| `1`–`5` | Column, Book, Focus, Cinema, Prompter |
-| `←` `→` / swipe | Turn the page (Book, Focus, Cinema) |
-| `P` | Auto-play Focus, Cinema and Prompter (`,` `.` slower / faster) |
-| `−` `+` · `[` `]` | Text size · line width |
-| `T` · `F` | Background · typeface |
-| `C` | Read the page again (a chat that has grown) |
-| `S` | Add the selected text to your notes (or click **Add to notes** by the selection) |
-| `M` | Show / hide the notes panel |
-| `Esc` | Close |
+| | Key | Does |
+| --- | --- | --- |
+| **Reading** | `↑` `↓` · `Space` · `←` `→` / swipe | Scroll, page, turn the page (Book, Focus, Cinema) |
+| | `P` · `,` `.` | Auto-play Focus, Cinema and Prompter · slower / faster |
+| **Layout & text** | `1`–`5` | Column, Book, Focus, Cinema, Prompter |
+| | `−` `+` · `[` `]` · `L` | Text size · line width · line height |
+| | `T` · `F` | Background (a picker: point to try, click to keep) · typeface |
+| **Documents** | `R` | History: everything you've read, searchable |
+| | `⌫` · `⇧⌫` (or `Alt+←` `→`) | Back · forward between documents |
+| | `C` | Read the page again (a chat that has grown); on the desktop, Claude Code sessions |
+| **Notes** | `S` · `M` | Add the selected text to your notes · show / hide the panel |
+| **Window** | `?` · `Esc` | Every key, grouped · close |
+
+`?` shows the full list for the version you're using, including its keys that work from anywhere.
 
 Your place in each document is remembered. More in [Layouts](#layouts).
+
+**History.** Everything you open is listed under **R** (or the clock button): grouped by day, with how far you got, newest first. Type to search, ↑↓ and Enter to open. The one you were reading before is picked already, so **R Enter** swaps between two. Conversations are found again by their address: on the iPad, picking a Claude chat from ChatGPT goes there and opens it in the reader. Remove one with its ×, or clear the lot. It is kept with your settings and notes (below).
 
 **Notes.** Select a passage and press `S` to keep it in the notes panel; write your own notes in the box at its foot (Enter adds one, Shift+Enter starts a new line), and add a thought under any kept passage. Click a kept passage to go back to it. The panel floats over the page: drag it by its header, resize it from its sides and bottom corners, collapse it into a small tab in the bottom-right corner (the chevron, or double-click the header; click the tab to bring it back where it was). **This doc** shows the open document's notes, **All** every note; the copy button puts them on the clipboard as Markdown, and the bin button deletes all of them (it asks first). The panel's foot says where they are kept.
 
@@ -59,7 +64,7 @@ Your place in each document is remembered. More in [Layouts](#layouts).
 
 | Version | Kept in |
 | --- | --- |
-| **Windows, Linux** desktop apps | Files in `Documents/Glass Reader/` (your real Documents folder, wherever it lives, OneDrive included): `settings.json`, `notes.json`, `notes.md` (the notes as Markdown, to read anywhere) and `backups/` (notes as they were before any deletion, and at most hourly otherwise; the newest 40). `GR_DATA_DIR` chooses another folder. They survive reinstalling and clearing the app's data. |
+| **Windows, Linux** desktop apps | Files in `Documents/Glass Reader/` (your real Documents folder, wherever it lives, OneDrive included): `settings.json`, `notes.json`, `history.json`, `notes.md` (the notes as Markdown, to read anywhere) and `backups/` (notes as they were before any deletion, and at most hourly otherwise; the newest 40). `GR_DATA_DIR` chooses another folder. They survive reinstalling and clearing the app's data. |
 | **Browser extension** | The extension's storage: one copy for every site and tab, and a change shows in tabs that are already open. Removing the extension removes it. |
 | **iPad, iPhone** (userscript) | The userscript's storage, shared by ChatGPT, Claude and Gemini. |
 
@@ -102,6 +107,7 @@ Updating: download the new file and replace the old one in the Userscripts folde
 The Android app reads conversations straight from the **apps**, and opens anything you share or select. It is the same reader (layouts, themes, maths, tables, code) running in a full-screen view.
 
 - **Read button.** Turn on *Reading from the screen* (the welcome card has a button; Android asks you to allow Glass Reader under Accessibility). In a ChatGPT, Claude or Gemini chat a small glass button sits on the right edge (drag it up or down; drag it onto the ✕ that appears at the bottom to hide it for 10 minutes, and tap the notification to bring it back sooner). Tap it: Glass Reader scrolls to the top of the chat, back down screen by screen, and opens the **whole conversation** at the latest answer. Tap the dimmed screen to stop. It only looks at those three apps, only when you tap the button, and nothing leaves the phone.
+- **Read button without breaking payment apps.** Google Pay and some banking apps refuse to work while any accessibility service that isn't an assistive tool is switched on. Installing with `npm run build:android -- --install` sets up the quiet way instead: the button is an ordinary overlay, and Accessibility is switched on only for the seconds a chat is being read, then off again. It needs three permissions an app can't ask for by itself, given once over USB (the install does it; by hand: `adb shell pm grant dev.glassreader android.permission.WRITE_SECURE_SETTINGS`, `adb shell appops set dev.glassreader SYSTEM_ALERT_WINDOW allow`, `adb shell appops set dev.glassreader GET_USAGE_STATS allow`, then open the app). A quiet "Read button is ready" notification keeps the button alive.
 - **Share or select.** Share a message, a file (PDF, EPUB, Word, Markdown, text) or a link to Glass Reader, or select text and pick **Glass Reader** in the selection menu. A shared ChatGPT, Claude or Gemini **share link** is opened in the background and read with the browser extension's `extract()`; other links go through Readability.
 - **Tap** shows the controls and they stay until you tap again (12 seconds if you leave them). In Book and Cinema, tap the sides (or swipe) to turn pages; in Focus, swipe. Volume keys turn pages; **Back** goes to the previous document, then closes.
 - **Glass** shows the chat you were reading, blurred (a picture taken when you tapped Read).
@@ -115,7 +121,7 @@ npm run build:android                # → dist/glass-reader.apk
 npm run build:android -- --install   # and install it on the phone connected over USB
 ```
 
-It uses `~/Android/jdk` and `~/Android/Sdk` unless `JAVA_HOME` / `ANDROID_HOME` are set. Without a cable, copy `dist/glass-reader.apk` to the phone and open it (Android asks to allow installing from that app once). The build copies `renderer/`, the fonts and libraries from `node_modules/` (run `npm install` first) and the extension's `background.js` and `Readability.js` into the app. Reinstalling turns the accessibility service off; `--install` turns it back on, otherwise do it in Settings → Accessibility. Debug builds also take `adb shell am broadcast -a dev.glassreader.READ` (as if the button was tapped) and `-a dev.glassreader.DUMP` (what the screen exposes, to logcat); only adb can send them.
+It uses `~/Android/jdk` and `~/Android/Sdk` unless `JAVA_HOME` / `ANDROID_HOME` are set. Without a cable, copy `dist/glass-reader.apk` to the phone and open it (Android asks to allow installing from that app once). The build copies `renderer/`, the fonts and libraries from `node_modules/` (run `npm install` first) and the extension's `background.js` and `Readability.js` into the app. `--install` also sets up the quiet way of reading from the screen (above); if that fails it turns the accessibility service on instead, which a reinstall switches off. Debug builds also take `adb shell am broadcast -a dev.glassreader.READ` (as if the button was tapped) and `-a dev.glassreader.DUMP` (what the screen exposes, to logcat); only adb can send them.
 
 ## Linux desktop app
 
@@ -257,7 +263,7 @@ Test files: `samples/diagrams.md` (Mermaid, local image, inline SVG) and `sample
 
 `P` auto-plays Focus, Cinema and Prompter (`,` `.` change words per minute). In Focus and Cinema, words light up at your reading speed.
 
-**Typography:** `−` `+` size · `[` `]` line width · `L` / `Shift+L` line height · `F` typeface · `A` justify · `I` indents · `T` background (Glass, Studio, Frost, Clear, Daylight, Paper, Lamp, Dusk, Night, Lights out). Studio is a spotlit dark backdrop where the text fades out at the top and bottom edges. Daylight → Lights out are matched to the light in the room:
+**Typography:** `−` `+` size · `[` `]` line width · `L` / `Shift+L` line height · `F` typeface · `A` justify · `I` indents · `T` background picker (Glass, Studio, Frost, Clear, Daylight, Paper, Lamp, Dusk, Night, Lights out). Studio is a spotlit dark backdrop where the text fades out at the top and bottom edges. Daylight → Lights out are matched to the light in the room:
 
 | Theme | Room | Why |
 |---|---|---|

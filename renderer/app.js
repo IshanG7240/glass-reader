@@ -4,9 +4,13 @@
 
 import { parseDocument, esc } from './parsers.js';
 import { initNotes } from './notes.js';
+import { initHistory } from './history.js';
+import { initThemeMenu } from './theme-menu.js';
+import { platformOf, bindings, renderHelp } from './keys.js';
 
 const $ = (s) => document.querySelector(s);
 const api = window.reader || null;
+const PLATFORM = platformOf(api);
 const body = document.body;
 const stage = $('#stage');
 
@@ -24,6 +28,12 @@ const THEME_ROOM = {
   daylight: 'bright room or sunlight', paper: 'well-lit room', lamp: 'evening, lamp-lit room',
   dusk: 'dim room', night: 'dark room', lightsout: 'dark room, before sleep · dim the screen too',
 };
+// What the others are, for the background picker.
+const THEME_ABOUT = {
+  glass: api?.inPage ? 'the page behind, blurred' : 'your desktop behind, blurred',
+  clear: 'see-through, darkened', frost: 'see-through, light',
+  studio: 'a spotlit dark stage; text fades at the edges',
+};
 const FULL = 160; // measure value meaning "use the full screen width"
 const DEFAULTS = { mode: 'column', font: 'sans', size: 20, measure: 76, leadAdj: 0, theme: 'studio', align: 'left', para: 'space', wpm: 240, hud: false };
 
@@ -31,7 +41,7 @@ const DEFAULTS = { mode: 'column', font: 'sans', size: 20, measure: 76, leadAdj:
 // pages (the browser extension), each site has its own localStorage, so these keys are
 // also handed to api.persist, which keeps one copy for every site and tab. The desktop
 // apps have one origin, so localStorage alone already is that copy.
-const SHARED = /^gr:(settings|notes|notes-ui)$/;
+const SHARED = /^gr:(settings|notes|notes-ui|history)$/;
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) {
@@ -42,7 +52,8 @@ const store = {
 const S = { ...DEFAULTS, ...store.get('gr:settings', {}) };
 const saveSettings = () => store.set('gr:settings', S);
 
-const st = { doc: null, file: null, prevFile: null, inbox: false, key: null, pos: 0, html: '', chunks: [], chunk: 0, cum: [], total: 1, heads: [], playing: false };
+// back / fwd: the documents before and after this one (⌫ and ⇧⌫, like a browser's).
+const st = { doc: null, file: null, back: [], fwd: [], histId: null, inbox: false, key: null, pos: 0, html: '', chunks: [], chunk: 0, cum: [], total: 1, heads: [], playing: false };
 let mode = null;
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -337,9 +348,7 @@ function setPos(p) {
 function savePos() {
   if (!st.key) return;
   store.set('gr:pos:' + st.key, st.pos);
-  const rec = store.get('gr:recents', []);
-  const r = rec.find((x) => x.key === st.key);
-  if (r) { r.pct = Math.round(st.cum[st.pos] / st.total * 100); store.set('gr:recents', rec); }
+  if (st.histId) hist.progress(st.histId, Math.round(st.cum[st.pos] / st.total * 100));
 }
 function fmtMins(m) {
   if (m < 1) return '<1 min';
@@ -797,7 +806,7 @@ function poke() {
   if (!hudPeek) { hudPeek = true; applyHud(); }
   clearTimeout(hudT);
   hudT = setTimeout(function settle() {
-    if ($('#hud').matches(':hover')) { hudT = setTimeout(settle, 2200); return; }
+    if ($('#hud').matches(':hover') || themeMenu?.isOpen()) { hudT = setTimeout(settle, 2200); return; }
     hudPeek = false;
     applyHud();
   }, 2200);
@@ -842,20 +851,54 @@ const ACT = {
   'lead-': () => change(() => { S.leadAdj = clamp(+(S.leadAdj - 0.05).toFixed(2), -0.5, 0.7); }, leadMsg),
   'lead+': () => change(() => { S.leadAdj = clamp(+(S.leadAdj + 0.05).toFixed(2), -0.5, 0.7); }, leadMsg),
   font: () => change(() => { S.font = cycle(Object.keys(FONTS), S.font); }, () => FONTS[S.font][1]),
-  theme: async () => {
-    change(() => { S.theme = cycle(Object.keys(THEMES), S.theme); }, () => THEMES[S.theme] + (THEME_ROOM[S.theme] ? ` · ${THEME_ROOM[S.theme]}` : ''), false);
-    if (st.doc && await renderDiagrams(st.doc)) { buildDoc(); setMode(S.mode); }
-  },
+  theme: () => { if (!themeMenu.isOpen()) poke(); themeMenu.toggle(); },
+  'wpm-': () => changeWpm(-10),
+  'wpm+': () => changeWpm(10),
+  history: () => hist.toggle(),
+  back: () => goBack(),
+  forward: () => goForward(),
   align: () => change(() => { S.align = S.align === 'justify' ? 'left' : 'justify'; }, () => (S.align === 'justify' ? 'Justified' : 'Ragged right')),
   para: () => change(() => { S.para = S.para === 'indent' ? 'space' : 'indent'; }, () => (S.para === 'indent' ? 'Book indents' : 'Paragraph spacing')),
   hud: () => change(() => { S.hud = !S.hud; }, () => (S.hud ? 'Controls pinned' : 'Controls auto-hide'), false),
   play: togglePlay,
   open: () => pickFile(),
   sample: () => openSample(),
-  help: () => { $('#help').hidden = !$('#help').hidden; },
+  help: () => {
+    if ($('#help').hidden) renderHelp($('#help .keys'), PLATFORM, esc);
+    $('#help').hidden = !$('#help').hidden;
+  },
   notes: () => notes.toggle(),
   hide: () => (api ? api.hide() : toast('Esc hides the overlay in the desktop app')),
 };
+
+// ---------- background picker ----------
+
+// Pointing at a swatch: the reader in that theme, nothing saved.
+function previewTheme(t) {
+  body.dataset.theme = t;
+  const dark = DARK_THEMES.has(t);
+  body.classList.toggle('dark', dark);
+  body.classList.toggle('light', !dark);
+}
+let diagramT = 0;
+function commitTheme(t) {
+  if (!THEMES[t]) return;
+  S.theme = t;
+  applyVars();
+  saveSettings();
+  // Diagrams are drawn for a light or a dark page; redraw once the choice settles.
+  clearTimeout(diagramT);
+  diagramT = setTimeout(async () => { if (st.doc && await renderDiagrams(st.doc)) { buildDoc(); setMode(S.mode); } }, 400);
+}
+const themeMenu = initThemeMenu({
+  names: THEMES,
+  about: (t) => THEME_ROOM[t] || THEME_ABOUT[t],
+  current: () => S.theme,
+  preview: previewTheme,
+  commit: commitTheme,
+  anchor: () => $('#v-theme'),
+  onClose: () => poke(),
+});
 
 // ---------- opening documents ----------
 
@@ -874,14 +917,15 @@ function setFetching(on) {
   else if (!$('#loading span').textContent.startsWith('Reading')) setLoading(false);
 }
 
-async function openFile(f) {
+// nav: 'back' / 'fwd' when moving through the documents already read (⌫, ⇧⌫).
+async function openFile(f, nav = null) {
   clearTimeout(fetchTimer);
   setLoading(true);
   try {
     const doc = await parseDocument(f, (p) => setLoading(true, `Reading… ${Math.round(p * 100)}%`), { resolveImage: imageResolver(f.path) });
     if (doc.blocks.some((b) => b.type === 'diagram')) { setLoading(true, 'Drawing diagrams…'); await renderDiagrams(doc); }
     if (!doc.blocks.length) throw new Error('No readable text found in this file.');
-    await loadDoc(doc, f);
+    await loadDoc(doc, f, nav);
   } catch (err) {
     console.error(err);
     toast(err.message || String(err), true);
@@ -907,10 +951,27 @@ function imageResolver(path) {
   };
 }
 
-async function loadDoc(doc, f) {
+const BACK_MAX = 12;
+const fileId = (f) => f?.url || f?.path || f?.name;
+function goBack() {
+  if (!st.back.length) return toast('Nothing to go back to · R shows everything you’ve read');
+  openFile(st.back[st.back.length - 1], 'back');
+}
+function goForward() {
+  if (!st.fwd.length) return toast('Nothing ahead');
+  openFile(st.fwd[st.fwd.length - 1], 'fwd');
+}
+
+async function loadDoc(doc, f, nav = null) {
   pause();
   for (const u of st.doc?.urls || []) URL.revokeObjectURL(u);
-  if (st.file && st.file.path !== f.path) st.prevFile = st.file;
+  // Reading a chat again (it has grown) replaces it; anything else is a step, like a browser's.
+  if (st.file && fileId(st.file) !== fileId(f)) {
+    if (nav === 'back') { st.back.pop(); st.fwd.push(st.file); }
+    else if (nav === 'fwd') { st.fwd.pop(); st.back.push(st.file); }
+    else { st.back.push(st.file); st.fwd = []; }
+    st.back = st.back.slice(-BACK_MAX);
+  }
   st.file = f;
   tidyTurns(doc);
   st.doc = doc;
@@ -932,36 +993,76 @@ async function loadDoc(doc, f) {
   $('#help').hidden = true;
   $('#v-title').textContent = doc.title;
   document.title = `${doc.title} — Glass Reader`;
-  if (f.path && !fromClaude && !/[\\/]glass-reader[\\/]captures[\\/]/.test(f.path)) addRecent({ title: doc.title, path: f.path, key: st.key });
+  const h = historyEntry(doc, f, isChat, fromClaude);
+  st.histId = h?.id || null;
+  if (h) hist.record({ ...h, pct: Math.round(st.cum[st.pos] / st.total * 100) });
   await document.fonts.ready;
   setMode(S.mode);
   console.info(`opened "${doc.title}": ${doc.blocks.length} blocks, ${st.chunks.length} chunks, mode ${S.mode}, at block ${st.pos}, ${doc.blocks.filter((b) => b.type === 'table').length} tables, ${doc.blocks.filter((b) => b.type === 'img').length} images`);
   if (isChat) {
     const n = doc.blocks.filter((b) => b.anchor?.startsWith('gr-turn')).length;
-    toast(n > 1 ? `Latest answer · ${n - 1} earlier above${st.prevFile ? ' · Backspace goes back' : ''}`
-      : st.prevFile ? `${fromClaude ? 'Claude’s answer' : 'The answer'} · Backspace returns to what you were reading` : fromClaude ? 'Claude’s answer' : 'The answer');
+    const back = st.back.length && !nav;
+    toast(n > 1 ? `Latest answer · ${n - 1} earlier above${back ? ' · Backspace goes back' : ''}`
+      : back ? `${fromClaude ? 'Claude’s answer' : 'The answer'} · Backspace returns to what you were reading` : fromClaude ? 'Claude’s answer' : 'The answer');
   }
+  else if (nav) toast(`${nav === 'back' ? '←' : '→'} ${doc.title}`);
   else if (st.pos > 0) toast(`Resumed at ${Math.round(st.cum[st.pos] / st.total * 100)}%`);
   notes.refresh();
 }
 
-function addRecent(r) {
-  const rec = store.get('gr:recents', []).filter((x) => x.path !== r.path);
-  const pct = Math.round(st.cum[st.pos] / st.total * 100);
-  rec.unshift({ ...r, pct });
-  store.set('gr:recents', rec.slice(0, 8));
+// ---------- history ----------
+
+const SITES = { 'chatgpt.com': 'ChatGPT', 'chat.openai.com': 'ChatGPT', 'claude.ai': 'Claude', 'gemini.google.com': 'Gemini', 'github.com': 'GitHub', 'docs.google.com': 'Google Docs' };
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
+// What history keeps of a document: only what can be opened again (a file, a page's
+// address, a Claude Code session, a capture saved on this device).
+function historyEntry(doc, f, isChat, fromClaude) {
+  const url = /^https?:/.test(f.url || '') ? f.url.replace(/#.*$/, '') : null;
+  const path = api?.inPage ? null : f.path || null; // in a web page, "paths" are only labels
+  if (!url && !path) return null;
+  const captured = /[\\/]glass-reader[\\/]captures[\\/]/.test(f.path || '');
+  const session = fromClaude ? /session-([\w-]+)\.md$/.exec(f.path)?.[1] || null : null;
+  const kind = fromClaude ? 'claude' : isChat ? 'chat' : captured || url ? 'page' : 'file';
+  const host = url ? hostOf(url) : '';
+  const site = fromClaude ? 'Claude Code' : SITES[host] || host
+    || (captured ? (isChat ? 'Chat' : 'Web page') : (f.name.match(/\.(\w+)$/)?.[1] || '').toUpperCase());
+  // A capture's file is new each time on a phone; the chat itself is the same one.
+  const id = url || (session ? 'claude:' + session : captured ? `${kind}:${doc.title}` : path);
+  return { id, title: doc.title, kind, site, url, path, session };
 }
+
+async function reopen(e) {
+  if (e.session && api?.openClaude && !api.inPage) {
+    const err = await api.openClaude(e.session);
+    if (!err) return;
+  }
+  if (api?.inPage) {
+    if (e.url && api.navigate) return api.navigate(e.url);
+    return toast('That one can’t be opened from here.', true);
+  }
+  if (e.path && api?.readPath) {
+    const d = await api.readPath(e.path);
+    if (d) return openFile(e.url ? { ...d, url: e.url } : d);
+  }
+  if (e.url) { window.open(e.url, '_blank', 'noopener'); return toast('No copy kept here: opened the page in your browser'); }
+  toast(e.kind === 'file' ? 'That file has moved or was deleted.' : 'That one is no longer saved on this device.', true);
+}
+
+const hist = initHistory({
+  store, toast, reopen,
+  current: () => (st.doc ? st.histId : null),
+  hint: PLATFORM === 'extension' ? 'Another page opens in this tab; click Glass Reader there to read it.' : '',
+});
+
 function renderRecents() {
   const box = $('#recents');
-  const rec = api ? store.get('gr:recents', []) : [];
-  box.innerHTML = rec.length ? '<h3>Continue reading</h3>' : '';
-  for (const r of rec.slice(0, 5)) {
+  const rec = hist.list().slice(0, 5);
+  box.innerHTML = rec.length ? '<h3>Continue reading <button data-act="history">All history <kbd>R</kbd></button></h3>' : '';
+  for (const r of rec) {
     const b = document.createElement('button');
-    b.innerHTML = `<span>${esc(r.title)}</span><span>${r.pct || 0}%</span>`;
-    b.onclick = async () => {
-      const d = await api.readPath(r.path);
-      if (d) openFile(d); else toast('That file has moved or was deleted.', true);
-    };
+    b.innerHTML = `<span>${esc(r.title)}</span><span>${r.site ? esc(r.site) + ' · ' : ''}${r.pct || 0}%</span>`;
+    b.onclick = () => reopen(r);
     box.append(b);
   }
 }
@@ -1046,13 +1147,21 @@ function pickerKey(e) {
 
 // ---------- input ----------
 
+// The keys are listed in keys.js (which also draws the ? sheet). In order: whatever is
+// open on top gets them first (background picker, history, session picker), then the
+// keys that work with no document, then the document's own.
+const BIND = bindings(PLATFORM);
 addEventListener('keydown', (e) => {
   if (e.target.closest?.('input, textarea, select')) return;
   const k = e.key;
   const lower = k.length === 1 ? k.toLowerCase() : k;
   if (e.ctrlKey && lower === 'q') { e.preventDefault(); return api ? api.quit() : undefined; }
   if (e.ctrlKey && lower === 'o') { e.preventDefault(); return pickFile(); }
+  // Alt+← / Alt+→: back and forward, as in a browser.
+  if (e.altKey && !e.ctrlKey && !e.metaKey && (k === 'ArrowLeft' || k === 'ArrowRight')) { e.preventDefault(); return k === 'ArrowLeft' ? goBack() : goForward(); }
   if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (themeMenu.isOpen()) { if (themeMenu.key(e)) e.preventDefault(); return; }
+  if (hist.isOpen()) { if (hist.key(e)) e.preventDefault(); return; }
   if (pickerOpen()) return pickerKey(e);
   if (lower === 'c' && api) return openPicker();
   if (k === 'Escape') {
@@ -1061,21 +1170,17 @@ addEventListener('keydown', (e) => {
     return ACT.hide();
   }
   if (k === '?') return ACT.help();
+  if (!$('#help').hidden) $('#help').hidden = true; // any other key puts the sheet away and does its thing
+  if (lower === 'r') { e.preventDefault(); return hist.open(); }
   if (lower === 'm') return notes.toggle();
   if (lower === 's' && notes.hasSelection()) { e.preventDefault(); return notes.addSelection(); }
   if (lower === 'n' && st.inbox && api) { st.inbox = false; return api.openInbox(); }
-  if (k === 'Backspace' && st.prevFile) { e.preventDefault(); return openFile(st.prevFile); }
+  if (k === 'Backspace') { e.preventDefault(); return e.shiftKey ? goForward() : goBack(); }
   if (lower === 'o') return pickFile();
   if (!st.doc) return;
-  const map = {
-    '-': 'size-', _: 'size-', '=': 'size+', '+': 'size+', '[': 'measure-', ']': 'measure+',
-    f: 'font', t: 'theme', a: 'align', i: 'para', h: 'hud', p: 'play',
-  };
   if (/^[1-5]$/.test(k)) { setMode(MODE_NAMES[+k - 1]); toast(MODE_NAMES[+k - 1][0].toUpperCase() + MODE_NAMES[+k - 1].slice(1)); return; }
-  if (lower === 'l') { e.preventDefault(); return e.shiftKey ? ACT['lead-']() : ACT['lead+'](); }
-  if (k === ',' || k === '<') return changeWpm(-10);
-  if (k === '.' || k === '>') return changeWpm(10);
-  if (map[k] || map[lower]) { e.preventDefault(); return ACT[map[k] || map[lower]](); }
+  const row = BIND.get(lower) || BIND.get(k);
+  if (row) { e.preventDefault(); return ACT[typeof row.act === 'function' ? row.act(e) : row.act](); }
   if (mode?.key(e)) e.preventDefault();
 });
 
@@ -1214,7 +1319,8 @@ if (api) {
       applyVars();
       if (st.doc && S.mode !== was) setMode(S.mode);
       else mode?.relayout();
-    } else notes.reload();
+    } else if (k === 'gr:history') hist.reload();
+    else notes.reload();
   });
   api.onInbox(() => { st.inbox = true; toast('Claude finished a new answer · press N to read it'); });
   api.wallpaper().then((url) => {
@@ -1227,4 +1333,4 @@ if (api) {
 }
 
 // expose for debugging in devtools
-window.__gr = { st, S, setMode, openSample, openFile, showPicker };
+window.__gr = { st, S, setMode, openSample, openFile, showPicker, hist, themeMenu };

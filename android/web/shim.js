@@ -78,7 +78,7 @@
         const el = document.getElementById(id);
         if (el && !el.hidden) { el.hidden = true; return true; }
       }
-      if (window.__gr?.st?.prevFile) {
+      if (window.__gr?.st?.back?.length) {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
         return true;
       }
@@ -119,8 +119,12 @@
       card.querySelector('.actions').after(box);
       const paint = () => {
         const s = JSON.parse(N.status());
-        box.innerHTML = s.screen
-          ? `<p><b>Reading from ChatGPT, Claude and Gemini is on.</b> Open a chat and tap the ${ICON} button at the right edge of the screen. Drag it onto the ✕ to hide it for 10 minutes.</p>`
+        box.innerHTML = s.quiet
+          ? `<p><b>Reading from ChatGPT, Claude and Gemini is on.</b> Open a chat and tap the ${ICON} button at the right edge of the screen. Drag it onto the ✕ to hide it for 10 minutes.</p>
+             <p class="gr-small">Accessibility is switched on only for the seconds a chat is being read, so Google Pay and other payment apps keep working.</p>`
+          : s.screen
+          ? `<p><b>Reading from ChatGPT, Claude and Gemini is on.</b> Open a chat and tap the ${ICON} button at the right edge of the screen. Drag it onto the ✕ to hide it for 10 minutes.</p>
+             <p class="gr-small">Google Pay and some banking apps refuse to work while this is on. Turn it off in Accessibility before paying, or set up the quiet way from a computer (see the README) and they keep working.</p>`
           : `<p>Read whole chats from the <b>ChatGPT</b>, <b>Claude</b> and <b>Gemini</b> apps with one tap.</p>
              <button class="primary" data-gr="screen">Turn on reading from the screen</button>
              <p class="gr-small">Android asks you to allow Glass Reader in Accessibility. It only looks at those three apps, only when you tap its button, and nothing leaves your phone.</p>`;

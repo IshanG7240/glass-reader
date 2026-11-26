@@ -58,7 +58,7 @@
     x.send();
     const { dir, values } = JSON.parse(x.responseText);
     dataDir = dir || '';
-    for (const k of ['gr:settings', 'gr:notes', 'gr:notes-ui']) {
+    for (const k of ['gr:settings', 'gr:notes', 'gr:notes-ui', 'gr:history']) {
       if (values && k in values) localStorage.setItem(k, JSON.stringify(values[k]));
       else if (localStorage.getItem(k) != null) send('persist', [k, JSON.parse(localStorage.getItem(k))]);
     }

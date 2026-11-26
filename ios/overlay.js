@@ -48,7 +48,7 @@
   // they are also kept in one place for every site and tab (renderer/app.js hands these
   // keys to persist()): the extension's chrome.storage, or the userscript manager's own
   // storage (GM.getValue / GM.setValue: Userscripts on iPad, Tampermonkey, Violentmonkey).
-  const SHARED_KEYS = ['gr:settings', 'gr:notes', 'gr:notes-ui'];
+  const SHARED_KEYS = ['gr:settings', 'gr:notes', 'gr:notes-ui', 'gr:history'];
   const GMs = typeof GM !== 'undefined' && GM?.getValue && GM?.setValue ? GM : null;
   const sharedStore = EXTENSION && globalThis.chrome?.storage?.local
     ? {
@@ -251,6 +251,8 @@
     const on = (name) => (cb) => { handlers[name] = cb; };
     W.reader = {
       inPage: true,
+      extension: EXTENSION,
+      navigate: goRead,
       hide: close, quit: close, ready() {}, log() {},
       wallpaper: async () => null,
       readPath: async () => null,
@@ -398,6 +400,27 @@
     await capture();
   }
 
+  // ---------- history: reading something from another page ----------
+  // The reader's history lists conversations from every site. Picking one on another page
+  // goes there; the userscript leaves itself a note so that page opens in the reader by
+  // itself. (The extension can't: the browser asks for its button again on every page.)
+  const sameDoc = (a, b) => a.replace(/[#?].*$/, '').replace(/\/$/, '') === b.replace(/[#?].*$/, '').replace(/\/$/, '');
+  async function goRead(url) {
+    if (sameDoc(url, location.href)) return capture();
+    if (!EXTENSION && GMs) { try { await GMs.setValue('gr:autoread', JSON.stringify({ url, at: Date.now() })); } catch { /* opens without it */ } }
+    location.href = url;
+  }
+  if (!EXTENSION && GMs) {
+    (async () => {
+      let note = null;
+      try { note = JSON.parse(await GMs.getValue('gr:autoread') || 'null'); } catch { /* none */ }
+      if (!note?.url) return;
+      await GMs.setValue('gr:autoread', '');
+      // Give the chat a moment to draw its messages before it is read.
+      if (Date.now() - note.at < 120e3 && sameDoc(note.url, location.href)) setTimeout(open, 1500);
+    })();
+  }
+
   // The extension's background reads the tab (this script can't see into other
   // frames or fetch across sites) and hands the page back.
   async function readByExtension() {
@@ -473,7 +496,8 @@
       if (!EXTENSION && !page.chat && !page.selection) throw new Error('Open a ChatGPT, Claude or Gemini conversation first.');
       const { name, body } = toDoc(page);
       // A "captures" path tells the reader a chat is one: open at the latest answer.
-      emit('open', { name, data: new TextEncoder().encode(body), path: `/glass-reader/captures/${name}` });
+      // The address goes along for the reader's history (a chat is found again by it).
+      emit('open', { name, data: new TextEncoder().encode(body), path: `/glass-reader/captures/${name}`, url: page.url || location.href });
     } catch (err) {
       emit('fetchingOff');
       emit('error', err?.message || String(err));

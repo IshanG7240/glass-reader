@@ -8,6 +8,7 @@
 //   <dir>/notes.json       your notes (the source of truth)
 //   <dir>/notes.md         the same notes as Markdown, rewritten on every change, to read anywhere
 //   <dir>/notes-ui.json    where the notes panel sits
+//   <dir>/history.json     what you've read (titles, where they came from, how far you got)
 //   <dir>/backups/         notes.json as it was before deletions, and at most hourly otherwise
 //
 // <dir> is GR_DATA_DIR, else Documents/Glass Reader, else ~/.local/share/glass-reader.
@@ -16,7 +17,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const FILES = { 'gr:settings': 'settings.json', 'gr:notes': 'notes.json', 'gr:notes-ui': 'notes-ui.json' };
+const FILES = { 'gr:settings': 'settings.json', 'gr:notes': 'notes.json', 'gr:notes-ui': 'notes-ui.json', 'gr:history': 'history.json' };
 const KEEP_BACKUPS = 40;
 
 // The real Documents folder: on Windows it is often moved (into OneDrive, say), so

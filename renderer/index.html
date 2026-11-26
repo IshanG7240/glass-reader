@@ -35,7 +35,7 @@
       </div>
       <p class="formats">PDF · Markdown · EPUB · Word · HTML · Text — or drop a file anywhere</p>
       <div id="recents"></div>
-      <p class="hint"><kbd>?</kbd> shortcuts · <kbd>Esc</kbd> hide overlay · <kbd>Ctrl</kbd><kbd>Q</kbd> quit</p>
+      <p class="hint"><kbd>?</kbd> shortcuts · <kbd>R</kbd> history · <kbd>Esc</kbd> hide overlay · <kbd>Ctrl</kbd><kbd>Q</kbd> quit</p>
     </div>
   </section>
 
@@ -66,11 +66,14 @@
       <button data-act="lead+" aria-label="Looser lines">☰</button>
     </div>
     <button data-act="font" id="v-font" title="Typeface (F)"></button>
-    <button data-act="theme" id="v-theme" title="Background (T)"></button>
+    <button data-act="theme" id="v-theme" title="Background (T)" aria-haspopup="listbox"></button>
     <button data-act="align" id="v-align" title="Alignment (A)"></button>
     <button data-act="play" id="v-play" title="Play / pause (P) · speed , ."></button>
     <span class="stat" id="v-stat"></span>
     <span class="sep"></span>
+    <button data-act="history" title="History: everything you've read (R)" aria-label="History">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 4.5v3.5h3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4.2l2.8 1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <button data-act="notes" title="Notes (M) · select text and press S to add it" aria-label="Notes">
       <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 3h9l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11h7M9 15h7M9 7h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
     </button>
@@ -85,29 +88,8 @@
 
   <section id="help" hidden>
     <div class="help-card">
-      <h2>Keyboard</h2>
-      <div class="keys">
-        <div><kbd>1</kbd>–<kbd>5</kbd><span>Column · Book · Focus · Cinema · Prompter</span></div>
-        <div><kbd>↑</kbd><kbd>↓</kbd> <kbd>Space</kbd><span>Move through the text</span></div>
-        <div><kbd>←</kbd><kbd>→</kbd><span>Turn pages / step</span></div>
-        <div><kbd>P</kbd><span>Auto-play (Focus, Cinema, Prompter)</span></div>
-        <div><kbd>,</kbd><kbd>.</kbd><span>Slower / faster (words per minute)</span></div>
-        <div><kbd>−</kbd><kbd>+</kbd><span>Text size</span></div>
-        <div><kbd>[</kbd><kbd>]</kbd><span>Line width</span></div>
-        <div><kbd>L</kbd><kbd>⇧L</kbd><span>Looser / tighter line height</span></div>
-        <div><kbd>F</kbd><span>Serif · Sans · Mono</span></div>
-        <div><kbd>T</kbd><span>Glass · Studio · Frost · Clear · Night · Paper</span></div>
-        <div><kbd>A</kbd><span>Left-aligned / justified</span></div>
-        <div><kbd>I</kbd><span>Paragraph spacing / book indents</span></div>
-        <div><kbd>H</kbd><span>Pin or auto-hide the control bar</span></div>
-        <div><kbd>O</kbd><span>Open a file</span></div>
-        <div><kbd>M</kbd><span>Notes: show / hide (drag, resize, collapse)</span></div>
-        <div><kbd>S</kbd><span>Add the selected text to your notes</span></div>
-        <div><kbd>C</kbd><span>Claude sessions</span></div>
-        <div><kbd>Ctrl</kbd><kbd>+</kbd><kbd>−</kbd><kbd>0</kbd><span>Zoom the whole interface</span></div>
-        <div><kbd>Esc</kbd><span>Hide the overlay</span></div>
-        <div><kbd>Ctrl</kbd><kbd>Q</kbd><span>Quit</span></div>
-      </div>
+      <h2>Keyboard <span>any key closes this</span></h2>
+      <div class="keys"></div>
       <p class="hint">Line height follows size and width automatically, so combinations stay readable. <kbd>L</kbd> nudges it.</p>
     </div>
   </section>
